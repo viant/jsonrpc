@@ -12,8 +12,7 @@ type Handler struct{}
 func (h *Handler) Serve(_ context.Context, request *jsonrpc.Request, response *jsonrpc.Response) {
 	response.Id = request.Id
 	response.Jsonrpc = request.Jsonrpc
-	anError := jsonrpc.NewMethodNotFound(request.Id, fmt.Sprintf("method %v not found", request.Method), nil)
-	response.Error = anError
+	response.Error = jsonrpc.NewMethodNotFound(fmt.Sprintf("method %v not found", request.Method), nil)
 }
 
 func (h *Handler) OnNotification(_ context.Context, _ *jsonrpc.Notification) {

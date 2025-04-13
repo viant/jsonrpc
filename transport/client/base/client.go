@@ -94,26 +94,9 @@ func (c *Client) handleRequest(ctx context.Context, data []byte, message *jsonrp
 	message.JsonRpcRequest = request
 	message.JsonRpcResponse = response
 	if err := c.sendResponse(ctx, response); err != nil {
-		c.handleError(ctx, jsonrpc.NewInternalError(nil, err.Error(), data))
+		c.handleError(ctx, jsonrpc.NewInternalError(err.Error(), data))
 	}
 }
-
-//func (c *Client) handleOnError(ctx context.Context, data []byte, message *jsonrpc.Message) {
-//	anError := &jsonrpc.Error{}
-//	err := json.Unmarshal(data, anError)
-//	if err != nil {
-//		fmt.Printf("failed to parse error: %v, %s", err, data)
-//		return
-//	}
-//	message.JsonRpcError = anError
-//	trip, err := c.RoundTrips.Match(anError.Id)
-//	if err != nil {
-//		fmt.Printf("failed to match request: %v, %s", anError.Id, data)
-//	}
-//	if trip != nil {
-//		trip.SetError(anError)
-//	}
-//}
 
 func (c *Client) handleOnNotification(ctx context.Context, data []byte, message *jsonrpc.Message) {
 	notification := &jsonrpc.Notification{}
