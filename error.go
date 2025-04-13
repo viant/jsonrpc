@@ -3,7 +3,7 @@ package jsonrpc
 import "fmt"
 
 // Error returns the error message
-func (e *InnerError) Error() string {
+func (e *Error) Error() string {
 	if e == nil {
 		return ""
 	}
@@ -11,26 +11,26 @@ func (e *InnerError) Error() string {
 }
 
 // NewParsingError creates a new parsing error
-func NewParsingError(id RequestId, message string, data []byte) *Error {
-	return NewError(id, NewInnerError(ParseError, message, data))
+func NewParsingError(message string, data []byte) *Error {
+	return NewError(ParseError, message, data)
 }
 
 // NewInternalError creates a new internal error
-func NewInternalError(id RequestId, message string, data []byte) *Error {
-	return NewError(id, NewInnerError(InternalError, message, data))
+func NewInternalError(message string, data []byte) *Error {
+	return NewError(InternalError, message, data)
 }
 
 // NewInvalidRequest creates a new invalid request error
-func NewInvalidRequest(id RequestId, message string, data []byte) *Error {
-	return NewError(id, NewInnerError(InvalidRequest, message, data))
+func NewInvalidRequest(message string, data []byte) *Error {
+	return NewError(InvalidRequest, message, data)
 }
 
 // NewInvalidParamsError creates a new invalid params error
-func NewInvalidParamsError(id RequestId, message string, data []byte) *Error {
-	return NewError(id, NewInnerError(InvalidParams, message, data))
+func NewInvalidParamsError(message string, data []byte) *Error {
+	return NewError(InvalidParams, message, data)
 }
 
 // NewMethodNotFound creates a new invalid request error
-func NewMethodNotFound(id RequestId, message string, data []byte) *Error {
-	return NewError(id, NewInnerError(MethodNotFound, message, data))
+func NewMethodNotFound(message string, data []byte) *Error {
+	return NewError(MethodNotFound, message, data)
 }

@@ -13,7 +13,6 @@ const (
 	MessageTypeRequest      MessageType = "request"
 	MessageTypeNotification MessageType = "notification"
 	MessageTypeResponse     MessageType = "response"
-	MessageTypeError        MessageType = "error"
 )
 
 // Message is a wrapper around the different types of JSON-RPC messages (Request, Notification, Response, Error).
@@ -22,7 +21,6 @@ type Message struct {
 	JsonRpcRequest      *Request
 	JsonRpcNotification *Notification
 	JsonRpcResponse     *Response
-	JsonRpcError        *Error
 }
 
 func (m *Message) Method() string {
@@ -43,8 +41,6 @@ func (m *Message) MarshalJSON() ([]byte, error) {
 		return json.Marshal(m.JsonRpcNotification)
 	case MessageTypeResponse:
 		return json.Marshal(m.JsonRpcResponse)
-	case MessageTypeError:
-		return json.Marshal(m.JsonRpcError)
 	default:
 		return nil, errors.New("unknown message type, couldn't marshal")
 	}
@@ -74,37 +70,13 @@ func NewResponseMessage(response *Response) *Message {
 	}
 }
 
-// NewErrorMessage creates a new JSON-RPC message of type Error.
-func NewErrorMessage(error *Error) *Message {
-	return &Message{
-		Type: MessageTypeError,
-		JsonRpcError: &Error{
-			Error:   error.Error,
-			Id:      error.Id,
-			Jsonrpc: error.Jsonrpc,
-		},
-	}
-}
-
-// NewError creates a new JSON-RPC error response.
+// NewError creates a new Error instance to represent the error that occurred.
 func NewError(
-	requestId RequestId, // The id of the request this error corresponds to
-	inner InnerError,
-) *Error {
-	return &Error{
-		Error:   inner,
-		Id:      requestId, // Default to 0 for the id, this should be overridden by the caller
-		Jsonrpc: Version,   // Use the current JSON-RPC version
-	}
-}
-
-// NewInnerError creates a new InnerError instance to represent the error that occurred.
-func NewInnerError(
 	code int,
 	message string,
 	data interface{},
-) InnerError {
-	return InnerError{
+) *Error {
+	return &Error{
 		Code:    code,
 		Message: message,
 		Data:    data,

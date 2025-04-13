@@ -70,7 +70,7 @@ func TestBatchResponse_MarshalJSON(t *testing.T) {
 			name: "Mixed responses and errors",
 			br: BatchResponse{
 				&Response{Id: float64(1), Jsonrpc: "2.0", Result: json.RawMessage(`{"result":3}`)},
-				&Error{Id: float64(2), Jsonrpc: "2.0", Error: InnerError{Code: -32600, Message: "Invalid Request"}},
+				&Response{Id: float64(2), Jsonrpc: "2.0", Error: &Error{Code: -32600, Message: "Invalid Request"}},
 			},
 			want:    `[{"id":1,"jsonrpc":"2.0","result":{"result":3}},{"error":{"code":-32600,"message":"Invalid Request"},"id":2,"jsonrpc":"2.0"}]`,
 			wantErr: false,
@@ -108,26 +108,26 @@ func TestNewBatchResponseHelpers(t *testing.T) {
 		{Id: float64(1), Jsonrpc: "2.0", Result: json.RawMessage(`{"result":3}`)},
 		{Id: float64(2), Jsonrpc: "2.0", Result: json.RawMessage(`{"result":5}`)},
 	}
-	
-	errors := []*Error{
-		{Id: float64(3), Jsonrpc: "2.0", Error: InnerError{Code: -32600, Message: "Invalid Request"}},
-		{Id: float64(4), Jsonrpc: "2.0", Error: InnerError{Code: -32601, Message: "Method not found"}},
+
+	errors := []*Response{
+		{Id: float64(3), Jsonrpc: "2.0", Error: &Error{Code: -32600, Message: "Invalid Request"}},
+		{Id: float64(4), Jsonrpc: "2.0", Error: &Error{Code: -32601, Message: "Method not found"}},
 	}
-	
+
 	t.Run("NewBatchResponseFromResponses", func(t *testing.T) {
 		br := NewBatchResponseFromResponses(responses)
 		if len(br) != len(responses) {
 			t.Errorf("NewBatchResponseFromResponses() length = %d, want %d", len(br), len(responses))
 		}
 	})
-	
+
 	t.Run("NewBatchResponseFromErrors", func(t *testing.T) {
 		br := NewBatchResponseFromErrors(errors)
 		if len(br) != len(errors) {
 			t.Errorf("NewBatchResponseFromErrors() length = %d, want %d", len(br), len(errors))
 		}
 	})
-	
+
 	t.Run("NewBatchResponseMixed", func(t *testing.T) {
 		br := NewBatchResponseMixed(responses, errors)
 		if len(br) != len(responses)+len(errors) {

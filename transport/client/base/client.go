@@ -58,9 +58,6 @@ func (c *Client) HandleMessage(ctx context.Context, data []byte) {
 	case jsonrpc.MessageTypeNotification:
 		c.handleOnNotification(ctx, data, message)
 		return
-	case jsonrpc.MessageTypeError:
-		c.handleOnError(ctx, data, message)
-		return
 	case jsonrpc.MessageTypeRequest:
 		c.handleRequest(ctx, data, message)
 		return
@@ -72,28 +69,28 @@ func (c *Client) handleResponse(ctx context.Context, data []byte, message *jsonr
 	response := &jsonrpc.Response{}
 	err := json.Unmarshal(data, response)
 	if err != nil {
-		c.handleError(ctx, jsonrpc.NewInternalError(nil, err.Error(), data))
+		fmt.Printf("failed to parse response: %v", err)
 		return
 	}
 	message.JsonRpcResponse = response
 	trip, err := c.RoundTrips.Match(response.Id)
 	if err != nil {
-		c.handleError(ctx, jsonrpc.NewInvalidRequest(nil, err.Error(), data))
-	} else {
-		trip.SetResponse(response)
+		fmt.Printf("failed to parse response: %v", err)
+		return
+
 	}
+	trip.SetResponse(response)
+
 }
 
 func (c *Client) handleRequest(ctx context.Context, data []byte, message *jsonrpc.Message) {
 	response := &jsonrpc.Response{}
 	request := &jsonrpc.Request{}
 	if err := json.Unmarshal(data, request); err != nil {
-		c.handleError(ctx, jsonrpc.NewParsingError(nil, fmt.Sprintf("failed to parse request: %v", err), data))
+		c.handleError(ctx, jsonrpc.NewParsingError(fmt.Sprintf("failed to parse request: %v", err), data))
 		return
 	}
-	if err := c.Handler.Serve(ctx, request, response); err != nil {
-		c.handleError(ctx, err)
-	}
+	c.Handler.Serve(ctx, request, response)
 	message.JsonRpcRequest = request
 	message.JsonRpcResponse = response
 	if err := c.sendResponse(ctx, response); err != nil {
@@ -101,23 +98,28 @@ func (c *Client) handleRequest(ctx context.Context, data []byte, message *jsonrp
 	}
 }
 
-func (c *Client) handleOnError(ctx context.Context, data []byte, message *jsonrpc.Message) {
-	enError := &jsonrpc.Error{}
-	err := json.Unmarshal(data, enError)
-	if err != nil {
-		c.handleError(ctx, jsonrpc.NewParsingError(nil, fmt.Sprintf("failed to parse error: %v", err), data))
-		return
-	}
-	message.JsonRpcError = enError
-	c.Handler.OnError(ctx, enError)
-}
+//func (c *Client) handleOnError(ctx context.Context, data []byte, message *jsonrpc.Message) {
+//	anError := &jsonrpc.Error{}
+//	err := json.Unmarshal(data, anError)
+//	if err != nil {
+//		fmt.Printf("failed to parse error: %v, %s", err, data)
+//		return
+//	}
+//	message.JsonRpcError = anError
+//	trip, err := c.RoundTrips.Match(anError.Id)
+//	if err != nil {
+//		fmt.Printf("failed to match request: %v, %s", anError.Id, data)
+//	}
+//	if trip != nil {
+//		trip.SetError(anError)
+//	}
+//}
 
 func (c *Client) handleOnNotification(ctx context.Context, data []byte, message *jsonrpc.Message) {
 	notification := &jsonrpc.Notification{}
 	err := json.Unmarshal(data, notification)
 	if err != nil {
-		c.handleError(ctx, jsonrpc.NewParsingError(nil, fmt.Sprintf("failed to parse notification: %v", err), data))
-		return
+		fmt.Printf("failed to parse notification: %v, %s", err, data)
 	}
 	c.Handler.OnNotification(ctx, notification)
 }

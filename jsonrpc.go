@@ -8,20 +8,8 @@ import (
 // RequestId is the type used to represent the id of a JSON-RPC request.
 type RequestId any
 
-// Error response is the standard JSON-RPC error response structure.
+// Error is used to provide additional information about the error that occurred.
 type Error struct {
-	// Error corresponds to the JSON schema field "error".
-	Error InnerError `json:"error" yaml:"error" mapstructure:"error"`
-
-	// Id corresponds to the JSON schema field "id".
-	Id RequestId `json:"id" yaml:"id" mapstructure:"id"`
-
-	// Jsonrpc corresponds to the JSON schema field "jsonrpc".
-	Jsonrpc string `json:"jsonrpc" yaml:"jsonrpc" mapstructure:"jsonrpc"`
-}
-
-// InnerError is used to provide additional information about the error that occurred.
-type InnerError struct {
 	// The error type that occurred.
 	Code int `json:"code" yaml:"code" mapstructure:"code"`
 
@@ -79,6 +67,7 @@ func (m *Request) UnmarshalJSON(data []byte) error {
 	m.Jsonrpc = *required.Jsonrpc
 	m.Method = *required.Method
 	m.Params = *required.Params
+
 	return nil
 }
 
@@ -127,6 +116,9 @@ type Response struct {
 	// Jsonrpc corresponds to the JSON schema field "jsonrpc".
 	Jsonrpc string `json:"jsonrpc" yaml:"jsonrpc" mapstructure:"jsonrpc"`
 
+	//Error
+	Error *Error `json:"error" yaml:"error" mapstructure:"error"`
+
 	// Result corresponds to the JSON schema field "result".
 	Result json.RawMessage `json:"result" yaml:"result" mapstructure:"result"`
 }
@@ -146,6 +138,7 @@ func (m *Response) UnmarshalJSON(data []byte) error {
 		Id      *RequestId       `json:"id" yaml:"id" mapstructure:"id"`
 		Jsonrpc *string          `json:"jsonrpc" yaml:"jsonrpc" mapstructure:"jsonrpc"`
 		Result  *json.RawMessage `json:"result" yaml:"result" mapstructure:"result"`
+		Error   *Error           `json:"error" yaml:"error" mapstructure:"error"`
 	}{}
 	err := json.Unmarshal(data, &required)
 	if err != nil {
@@ -157,11 +150,12 @@ func (m *Response) UnmarshalJSON(data []byte) error {
 	if required.Jsonrpc == nil {
 		return errors.New("field jsonrpc in Response: required")
 	}
-	if required.Result == nil {
-		return errors.New("field result in Response: required")
-	}
 	m.Id = *required.Id
 	m.Jsonrpc = *required.Jsonrpc
 	m.Result = *required.Result
+	m.Error = required.Error
+	if required.Result == nil && required.Error == nil {
+		return errors.New("field result in Response: required")
+	}
 	return err
 }

@@ -9,9 +9,6 @@ import (
 func MessageType(data []byte) jsonrpc.MessageType {
 	probe := &probe{}
 	_ = json.Unmarshal(data, probe)
-	if probe.Error != nil {
-		return jsonrpc.MessageTypeError
-	}
 	if probe.Id == nil {
 		return jsonrpc.MessageTypeNotification
 	}
@@ -22,7 +19,7 @@ func MessageType(data []byte) jsonrpc.MessageType {
 }
 
 type probe struct {
-	Id     jsonrpc.RequestId   `json:"id"`
-	Error  *jsonrpc.InnerError `json:"error" yaml:"error"`
-	Method string              `json:"method" yaml:"method"`
+	Id     jsonrpc.RequestId `json:"id"`
+	Error  *jsonrpc.Error    `json:"error" yaml:"error"`
+	Method string            `json:"method" yaml:"method"`
 }

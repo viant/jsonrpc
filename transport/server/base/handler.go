@@ -24,10 +24,7 @@ func (e *Handler) HandleMessage(ctx context.Context, session *Session, data []by
 			return
 		}
 		response := &jsonrpc.Response{Id: request.Id, Jsonrpc: request.Jsonrpc}
-		if err := session.Handler.Serve(ctx, request, response); err != nil {
-			session.SendError(ctx, err)
-			return
-		}
+		session.Handler.Serve(ctx, request, response)
 		session.SendResponse(ctx, response)
 	case jsonrpc.MessageTypeResponse:
 		response := &jsonrpc.Response{}
@@ -41,24 +38,27 @@ func (e *Handler) HandleMessage(ctx context.Context, session *Session, data []by
 			return
 		}
 		aTrip.SetResponse(response)
+
+		//TODO move fmt.Printf to a logger to expose to implementers
 	case jsonrpc.MessageTypeNotification:
 		notification := &jsonrpc.Notification{}
 		if err := json.Unmarshal(data, notification); err != nil {
-			session.SendError(ctx, jsonrpc.NewParsingError(nil, fmt.Sprintf("failed to parse: %v", err), data))
+			fmt.Printf("failed to parse notification: %v", err)
 			return
 		}
-		if err := session.Handler.OnNotification(ctx, notification); err != nil {
-			session.SendError(ctx, err)
-		}
+		session.Handler.OnNotification(ctx, notification)
 	case jsonrpc.MessageTypeError:
-		enError := &jsonrpc.Error{}
-		if err := json.Unmarshal(data, enError); err != nil {
-			session.SendError(ctx, jsonrpc.NewParsingError(nil, fmt.Sprintf("failed to parse: %v", err), data))
+		anError := &jsonrpc.Error{}
+		if err := json.Unmarshal(data, anError); err != nil {
+			fmt.Printf("failed to parse error: %v", anError)
 			return
 		}
-		if err := session.Handler.OnError(ctx, enError); err != nil {
-			session.SendError(ctx, err)
+		aTrip, err := session.RoundTrips.Match(anError.Id)
+		if err != nil {
+			fmt.Printf("failed to match request: %v", anError.Id)
+			return
 		}
+		aTrip.SetError(anError)
 	}
 }
 

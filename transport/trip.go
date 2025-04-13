@@ -26,11 +26,6 @@ func NewRoundTrip(request *jsonrpc.Request) *RoundTrip {
 	}
 }
 
-// Error returns the error
-func (t *RoundTrip) Error() error {
-	return t.err
-}
-
 // Wait waits for the trip to finish
 func (t *RoundTrip) Wait(ctx context.Context, timeout time.Duration) error {
 	select {
@@ -47,8 +42,8 @@ func (t *RoundTrip) Wait(ctx context.Context, timeout time.Duration) error {
 }
 
 // SetError sets the error
-func (t *RoundTrip) SetError(err error) {
-	t.err = err
+func (t *RoundTrip) SetError(error *jsonrpc.Error) {
+	t.Response = &jsonrpc.Response{Id: t.Request.Id, Jsonrpc: t.Request.Jsonrpc, Error: error}
 	close(t.done)
 }
 

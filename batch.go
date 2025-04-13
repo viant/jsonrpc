@@ -17,18 +17,18 @@ func (b *BatchRequest) UnmarshalJSON(data []byte) error {
 	if string(data) == "[]" {
 		return errors.New("invalid batch request: empty array")
 	}
-	
+
 	// Try to unmarshal as an array
 	var requests []*Request
 	err := json.Unmarshal(data, &requests)
 	if err != nil {
 		return err
 	}
-	
+
 	if len(requests) == 0 {
 		return errors.New("invalid batch request: empty array")
 	}
-	
+
 	*b = requests
 	return nil
 }
@@ -51,7 +51,7 @@ func NewBatchResponseFromResponses(responses []*Response) BatchResponse {
 }
 
 // NewBatchResponseFromErrors creates a new BatchResponse from a slice of Error objects
-func NewBatchResponseFromErrors(errors []*Error) BatchResponse {
+func NewBatchResponseFromErrors(errors []*Response) BatchResponse {
 	result := make(BatchResponse, len(errors))
 	for i, err := range errors {
 		result[i] = err
@@ -60,16 +60,16 @@ func NewBatchResponseFromErrors(errors []*Error) BatchResponse {
 }
 
 // NewBatchResponseMixed creates a new BatchResponse from a mix of Response and Error objects
-func NewBatchResponseMixed(responses []*Response, errors []*Error) BatchResponse {
+func NewBatchResponseMixed(responses []*Response, errors []*Response) BatchResponse {
 	result := make(BatchResponse, 0, len(responses)+len(errors))
-	
+
 	for _, resp := range responses {
 		result = append(result, resp)
 	}
-	
+
 	for _, err := range errors {
 		result = append(result, err)
 	}
-	
+
 	return result
 }
