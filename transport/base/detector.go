@@ -15,10 +15,14 @@ func MessageType(data []byte) jsonrpc.MessageType {
 	if probe.Id == nil {
 		return jsonrpc.MessageTypeNotification
 	}
-	return jsonrpc.MessageTypeRequest
+	if probe.Method != "" {
+		return jsonrpc.MessageTypeRequest
+	}
+	return jsonrpc.MessageTypeResponse
 }
 
 type probe struct {
-	Id    jsonrpc.RequestId   `json:"id"`
-	Error *jsonrpc.InnerError `json:"error" yaml:"error"`
+	Id     jsonrpc.RequestId   `json:"id"`
+	Error  *jsonrpc.InnerError `json:"error" yaml:"error"`
+	Method string              `json:"method" yaml:"method"`
 }

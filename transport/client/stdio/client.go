@@ -40,7 +40,7 @@ func (c *Client) start(ctx context.Context) error {
 	} else {
 		c.client = local.New(options...) // fallback to local client if no SSH config is provided
 	}
-	c.base.Transport = &transport{client: c.client}
+	c.base.Transport = &Transport{client: c.client}
 	cmd := c.command
 	if len(c.args) > 0 {
 		cmd = fmt.Sprintf("%s %s", c.command, strings.Join(c.args, " "))
@@ -66,19 +66,14 @@ func (c *Client) stdoutListener() runner.Listener {
 		if index != -1 {
 			defer builder.Reset()
 			builder.WriteString(stdout[:index])
-
 			data := []byte(builder.String())
-			if c.base.HandleMessage(c.ctx, data) {
-				return
-			}
+			c.base.HandleMessage(c.ctx, data)
+			return
+
 		} else {
 			builder.WriteString(stdout)
 		}
 	}
-}
-
-func (c *Client) Notification() chan *jsonrpc.Notification {
-	return c.base.Notification()
 }
 
 func (c *Client) Notify(ctx context.Context, request *jsonrpc.Notification) error {
@@ -111,9 +106,10 @@ func New(command string, options ...Option) (*Client, error) {
 		command: command,
 		ctx:     context.Background(),
 		base: &base.Client{
-			RouteTrips: transport2.NewRoundTrips(20),
+			RoundTrips: transport2.NewRoundTrips(20),
 			RunTimeout: time.Minute,
-			Transport:  &transport{},
+			Transport:  &Transport{},
+			Handler:    &base.Handler{},
 		},
 	}
 	for _, opt := range options {

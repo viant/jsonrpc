@@ -25,6 +25,15 @@ type Message struct {
 	JsonRpcError        *Error
 }
 
+func (m *Message) Method() string {
+	switch m.Type {
+	case MessageTypeRequest:
+		return m.JsonRpcRequest.Method
+	default:
+		return ""
+	}
+}
+
 // MarshalJSON is a custom JSON marshaler for the Message type.
 func (m *Message) MarshalJSON() ([]byte, error) {
 	switch m.Type {

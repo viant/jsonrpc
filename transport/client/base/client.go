@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/viant/jsonrpc"
 	"github.com/viant/jsonrpc/transport"
+	"github.com/viant/jsonrpc/transport/base"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -14,16 +15,12 @@ import (
 
 type Client struct {
 	Transport
-	*transport.RouteTrips
+	Handler transport.Handler
+	*transport.RoundTrips
 	RunTimeout time.Duration
-
-	Listener jsonrpc.Listener
-	counter  uint64
-	err      error
-}
-
-func (c *Client) Notification() chan *jsonrpc.Notification {
-	return c.RouteTrips.Notifications()
+	Listener   jsonrpc.Listener
+	counter    uint64
+	err        error
 }
 
 func (c *Client) Notify(ctx context.Context, request *jsonrpc.Notification) error {
@@ -39,7 +36,7 @@ func (c *Client) SetError(err error) {
 }
 
 func (c *Client) Send(ctx context.Context, request *jsonrpc.Request) (*jsonrpc.Response, error) {
-	request.Id = atomic.AddUint64(&c.counter, 1)
+	request.Id = int(atomic.AddUint64(&c.counter, 1))
 	trip, err := c.send(ctx, request)
 	if err != nil {
 		return nil, err // send error
@@ -51,49 +48,78 @@ func (c *Client) Send(ctx context.Context, request *jsonrpc.Request) (*jsonrpc.R
 	return trip.Response, err
 }
 
-func (c *Client) HandleMessage(ctx context.Context, data []byte) bool {
-	messageType := MessageType(data)
+func (c *Client) HandleMessage(ctx context.Context, data []byte) {
+	messageType := base.MessageType(data)
 	message := &jsonrpc.Message{Type: messageType}
 	if c.Listener != nil {
 		defer c.Listener(message)
 	}
 	switch messageType {
 	case jsonrpc.MessageTypeNotification:
-		notification := &jsonrpc.Notification{}
-		err := json.Unmarshal(data, notification)
-		if err != nil {
-			c.handleError(ctx, jsonrpc.NewParsingError(nil, fmt.Errorf("failed to parse notification: %w", err), data))
-			return true
-		}
-		message.JsonRpcNotification = notification
-		if err = c.RouteTrips.Notify(notification); err != nil {
-			c.handleError(ctx, jsonrpc.NewParsingError(nil, fmt.Errorf("failed send notification: %w", err), data))
-		}
-		return true
+		c.handleOnNotification(ctx, data, message)
+		return
 	case jsonrpc.MessageTypeError:
-		enError := &jsonrpc.Error{}
-		err := json.Unmarshal(data, enError)
-		if err != nil {
-			c.handleError(ctx, jsonrpc.NewParsingError(nil, fmt.Errorf("failed to parse error: %w", err), data))
-			return true
-		}
-		message.JsonRpcError = enError
-		return true
+		c.handleOnError(ctx, data, message)
+		return
+	case jsonrpc.MessageTypeRequest:
+		c.handleRequest(ctx, data, message)
+		return
 	}
+	c.handleResponse(ctx, data, message)
+}
+
+func (c *Client) handleResponse(ctx context.Context, data []byte, message *jsonrpc.Message) {
 	response := &jsonrpc.Response{}
 	err := json.Unmarshal(data, response)
 	if err != nil {
-		c.handleError(ctx, jsonrpc.NewParsingError(nil, fmt.Errorf("failed to parse enError: %w", err), data))
-		return true
+		c.handleError(ctx, jsonrpc.NewInternalError(nil, err.Error(), data))
+		return
 	}
 	message.JsonRpcResponse = response
-	trip, err := c.RouteTrips.Match(response.Id)
+	trip, err := c.RoundTrips.Match(response.Id)
 	if err != nil {
-		c.handleError(ctx, jsonrpc.NewInvalidRequest(nil, err, data))
+		c.handleError(ctx, jsonrpc.NewInvalidRequest(nil, err.Error(), data))
 	} else {
 		trip.SetResponse(response)
 	}
-	return false
+}
+
+func (c *Client) handleRequest(ctx context.Context, data []byte, message *jsonrpc.Message) {
+	response := &jsonrpc.Response{}
+	request := &jsonrpc.Request{}
+	if err := json.Unmarshal(data, request); err != nil {
+		c.handleError(ctx, jsonrpc.NewParsingError(nil, fmt.Sprintf("failed to parse request: %v", err), data))
+		return
+	}
+	if err := c.Handler.Serve(ctx, request, response); err != nil {
+		c.handleError(ctx, err)
+	}
+	message.JsonRpcRequest = request
+	message.JsonRpcResponse = response
+	if err := c.sendResponse(ctx, response); err != nil {
+		c.handleError(ctx, jsonrpc.NewInternalError(nil, err.Error(), data))
+	}
+}
+
+func (c *Client) handleOnError(ctx context.Context, data []byte, message *jsonrpc.Message) {
+	enError := &jsonrpc.Error{}
+	err := json.Unmarshal(data, enError)
+	if err != nil {
+		c.handleError(ctx, jsonrpc.NewParsingError(nil, fmt.Sprintf("failed to parse error: %v", err), data))
+		return
+	}
+	message.JsonRpcError = enError
+	c.Handler.OnError(ctx, enError)
+}
+
+func (c *Client) handleOnNotification(ctx context.Context, data []byte, message *jsonrpc.Message) {
+	notification := &jsonrpc.Notification{}
+	err := json.Unmarshal(data, notification)
+	if err != nil {
+		c.handleError(ctx, jsonrpc.NewParsingError(nil, fmt.Sprintf("failed to parse notification: %v", err), data))
+		return
+	}
+	c.Handler.OnNotification(ctx, notification)
 }
 
 func (c *Client) handleError(ctx context.Context, error *jsonrpc.Error) {
@@ -106,11 +132,11 @@ func (c *Client) handleError(ctx context.Context, error *jsonrpc.Error) {
 	}
 }
 
-func (c *Client) send(ctx context.Context, request *jsonrpc.Request) (*transport.RouteTrip, error) {
+func (c *Client) send(ctx context.Context, request *jsonrpc.Request) (*transport.RoundTrip, error) {
 	if c.err != nil {
 		return nil, c.err
 	}
-	trip, err := c.RouteTrips.Add(request)
+	trip, err := c.RoundTrips.Add(request)
 	if err != nil {
 		return nil, err
 	}
@@ -132,6 +158,22 @@ func (c *Client) sendRequest(ctx context.Context, request *jsonrpc.Request) erro
 	}
 	if c.Listener != nil {
 		c.Listener(&jsonrpc.Message{Type: jsonrpc.MessageTypeRequest, JsonRpcRequest: request})
+	}
+	err = c.SendData(ctx, buffer.Bytes())
+	return err
+}
+
+func (c *Client) sendResponse(ctx context.Context, response *jsonrpc.Response) error {
+	buffer := new(bytes.Buffer)
+	err := json.NewEncoder(buffer).Encode(response)
+	if err != nil {
+		return fmt.Errorf("failed to marshal response: %w", err)
+	}
+	if !strings.HasSuffix(buffer.String(), "\n") {
+		buffer.WriteByte('\n')
+	}
+	if c.Listener != nil {
+		c.Listener(&jsonrpc.Message{Type: jsonrpc.MessageTypeResponse, JsonRpcResponse: response})
 	}
 	err = c.SendData(ctx, buffer.Bytes())
 	return err

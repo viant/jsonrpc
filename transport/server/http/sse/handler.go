@@ -1,6 +1,7 @@
 package sse
 
 import (
+	"context"
 	"fmt"
 	"github.com/viant/jsonrpc/transport"
 	"github.com/viant/jsonrpc/transport/server/base"
@@ -10,14 +11,14 @@ import (
 	"strings"
 )
 
-// Handler represents a server-side handler for SSE and message transport.
+// Handler represents a server-side newNandler for SSE and message transport.
 type Handler struct {
 	base              *base.Handler
 	messageURI        string
 	sseURI            string
 	sessionIdLocation *Location // Optional sessionIdLocation for the transport, used for constructing full URIs
 	locator           Locator
-	handler           transport.Handler
+	newHandler        transport.NewHandler
 	options           []base.Option
 }
 
@@ -63,8 +64,8 @@ func (s *Handler) handleMessage(w http.ResponseWriter, r *http.Request) {
 	}
 	r.Body.Close()
 	ctx := r.Context() // Use the request context for handling
-	// Handle the message via the handler
-	s.base.HandleRequest(ctx, sess, data)
+	// Handle the message via the newNandler
+	s.base.HandleMessage(ctx, sess, data)
 	err = sess.Error()
 	if err != nil {
 		http.Error(w, fmt.Sprintf("failed to handle message: %v", err), http.StatusInternalServerError)
@@ -92,7 +93,7 @@ func (s *Handler) handleSSE(w http.ResponseWriter, r *http.Request) {
 
 // initSessionHandshake initializes a new session.
 func (s *Handler) initSessionHandshake(writer *Writer, r *http.Request) error {
-	aSession := base.NewSession("", writer, s.handler, s.options...)
+	aSession := base.NewSession(context.Background(), "", writer, s.newHandler, s.options...)
 	query := url.Values{}
 	if err := s.locator.Set(s.sessionIdLocation, query, aSession.Id); err != nil {
 		return err
@@ -107,9 +108,9 @@ func (s *Handler) initSessionHandshake(writer *Writer, r *http.Request) error {
 }
 
 // New creates a new Handler instance with the provided options.
-func New(handler transport.Handler, options ...Option) *Handler {
+func New(newHandler transport.NewHandler, options ...Option) *Handler {
 	ret := &Handler{
-		handler:           handler,
+		newHandler:        newHandler,
 		sseURI:            "/sse",     // Default SSE URI
 		messageURI:        "/message", // Default message URI
 		base:              base.NewHandler(),

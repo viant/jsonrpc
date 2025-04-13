@@ -2,7 +2,7 @@ package stdio
 
 import (
 	"github.com/viant/jsonrpc"
-	transport2 "github.com/viant/jsonrpc/transport"
+	"github.com/viant/jsonrpc/transport"
 	"github.com/viant/scy/cred/secret"
 	"time"
 )
@@ -34,9 +34,9 @@ func WithSecret(resource secret.Resource) Option {
 }
 
 // WithTrips with trips
-func WithTrips(trips *transport2.RouteTrips) Option {
+func WithTrips(trips *transport.RoundTrips) Option {
 	return func(c *Client) {
-		c.base.RouteTrips = trips
+		c.base.RoundTrips = trips
 	}
 }
 
@@ -50,5 +50,11 @@ func WithListener(listener jsonrpc.Listener) Option {
 func WithRunTimeout(timeoutMs int) Option {
 	return func(c *Client) {
 		c.base.RunTimeout = time.Duration(timeoutMs) * time.Millisecond
+	}
+}
+
+func WithHandler(handler transport.Handler) Option {
+	return func(c *Client) {
+		c.base.Handler = handler
 	}
 }

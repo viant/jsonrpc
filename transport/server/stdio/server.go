@@ -14,10 +14,9 @@ const sessionKey = "stdio"
 
 // Server represents a server that handles incoming requests and responses
 type Server struct {
-	base    *base.Handler
-	handler transport.Handler
-	inout   io.ReadCloser
-	reader  *bufio.Reader
+	base   *base.Handler
+	inout  io.ReadCloser
+	reader *bufio.Reader
 
 	errWriter io.Writer // Error writer for logging errors, defaults to os.Stderr
 	logger    *Logger   // Custom logger for logging messages
@@ -53,7 +52,7 @@ func (t *Server) ListenAndServe(ctx context.Context) error {
 		if !ok {
 			return fmt.Errorf("session not found")
 		}
-		t.base.HandleRequest(ctx, session, []byte(line))
+		t.base.HandleMessage(ctx, session, []byte(line))
 	}
 }
 
@@ -86,9 +85,8 @@ func (t *Server) readLine(ctx context.Context) (string, error) {
 }
 
 // New creates a new stdio transport instance with the provided handler and options
-func New(handler transport.Handler, options ...Option) *Server {
+func New(ctx context.Context, newHandler transport.NewHandler, options ...Option) *Server {
 	ret := &Server{
-		handler:   handler,
 		base:      base.NewHandler(),
 		inout:     os.Stdin,
 		errWriter: os.Stderr,
@@ -96,7 +94,7 @@ func New(handler transport.Handler, options ...Option) *Server {
 	for _, option := range options {
 		option(ret)
 	}
-	aSession := base.NewSession(sessionKey, os.Stdout, ret.handler, ret.options...)
+	aSession := base.NewSession(ctx, sessionKey, os.Stdout, newHandler, ret.options...)
 	ret.base.Sessions.Put(sessionKey, aSession)
 	// Apply all options
 	for _, opt := range options {

@@ -2,7 +2,7 @@ package sse
 
 import (
 	"github.com/viant/jsonrpc"
-	transport2 "github.com/viant/jsonrpc/transport"
+	"github.com/viant/jsonrpc/transport"
 	"net/http"
 	"time"
 )
@@ -25,9 +25,9 @@ func WithHandshakeTimeout(timeout time.Duration) Option {
 }
 
 // WithTrips sets the trips for the SSE client
-func WithTrips(trips *transport2.RouteTrips) Option {
+func WithTrips(trips *transport.RoundTrips) Option {
 	return func(c *Client) {
-		c.base.RouteTrips = trips
+		c.base.RoundTrips = trips
 	}
 }
 
@@ -35,5 +35,11 @@ func WithTrips(trips *transport2.RouteTrips) Option {
 func WithListener(listener jsonrpc.Listener) Option {
 	return func(c *Client) {
 		c.base.Listener = listener
+	}
+}
+
+func WithHandler(handler transport.Handler) Option {
+	return func(c *Client) {
+		c.base.Handler = handler
 	}
 }

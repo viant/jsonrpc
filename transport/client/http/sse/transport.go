@@ -7,19 +7,23 @@ import (
 	"github.com/viant/afs/url"
 	"io"
 	"net/http"
+	"sync"
 )
 
-type transport struct {
+type Transport struct {
 	client   *http.Client
 	host     string
 	endpoint string
 	headers  http.Header
+	sync.Mutex
 }
 
 // SendData sends data to the server
-func (c *transport) SendData(ctx context.Context, data []byte) error {
+func (c *Transport) SendData(ctx context.Context, data []byte) error {
+	c.Mutex.Lock()
+	defer c.Mutex.Unlock()
 	if c.endpoint == "" {
-		return fmt.Errorf("transport is not initialized - endpoint is empty")
+		return fmt.Errorf("Transport is not initialized - endpoint is empty")
 	}
 	req, err := http.NewRequestWithContext(ctx, "POST", c.endpoint,
 		bytes.NewReader(data),
@@ -46,6 +50,6 @@ func (c *transport) SendData(ctx context.Context, data []byte) error {
 	return nil
 }
 
-func (c *transport) setEndpoint(URI string) {
+func (c *Transport) setEndpoint(URI string) {
 	c.endpoint = url.Join(c.host, URI)
 }

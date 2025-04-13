@@ -22,7 +22,7 @@ type Client struct {
 	messageURL       string
 	base             *base.Client
 	done             chan bool
-	transport        *transport
+	transport        *Transport
 }
 
 func (c *Client) start(ctx context.Context) error {
@@ -48,10 +48,6 @@ func (c *Client) start(ctx context.Context) error {
 	go c.listenForMessages(ctx, reader)
 	return nil
 
-}
-
-func (c *Client) Notification() chan *jsonrpc.Notification {
-	return c.base.Notification()
 }
 
 func (c *Client) Notify(ctx context.Context, request *jsonrpc.Notification) error {
@@ -165,9 +161,10 @@ func New(ctx context.Context, streamURL string, options ...Option) (*Client, err
 		done:             make(chan bool),
 		base: &base.Client{
 			RunTimeout: time.Minute,
-			RouteTrips: transport2.NewRoundTrips(100),
+			RoundTrips: transport2.NewRoundTrips(100),
+			Handler:    &base.Handler{},
 		},
-		transport: &transport{
+		transport: &Transport{
 			client: client,
 			host:   fmt.Sprintf("%s://%s", schema, host),
 		},
