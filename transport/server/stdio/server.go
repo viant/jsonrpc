@@ -14,16 +14,16 @@ const sessionKey = "stdio"
 
 // Server represents a server that handles incoming requests and responses
 type Server struct {
-	base   *base.Handler
-	inout  io.ReadCloser
-	reader *bufio.Reader
-
+	base      *base.Handler
+	inout     io.ReadCloser
+	reader    *bufio.Reader
+	ctx       context.Context
 	errWriter io.Writer // Error writer for logging errors, defaults to os.Stderr
 	logger    *Logger   // Custom logger for logging messages
 	options   []base.Option
 }
 
-func (t *Server) ListenAndServe(ctx context.Context) error {
+func (t *Server) ListenAndServe() error {
 	// Ensure reader is initialized
 	if t.reader == nil && t.inout != nil {
 		t.reader = bufio.NewReader(t.inout)
@@ -38,10 +38,10 @@ func (t *Server) ListenAndServe(ctx context.Context) error {
 	}
 
 	for {
-		if err := ctx.Err(); err != nil {
+		if err := t.ctx.Err(); err != nil {
 			return err
 		}
-		line, err := t.readLine(ctx)
+		line, err := t.readLine(t.ctx)
 		if err != nil {
 			if err == io.EOF {
 				return nil
@@ -52,7 +52,7 @@ func (t *Server) ListenAndServe(ctx context.Context) error {
 		if !ok {
 			return fmt.Errorf("session not found")
 		}
-		t.base.HandleMessage(ctx, session, []byte(line))
+		t.base.HandleMessage(t.ctx, session, []byte(line))
 	}
 }
 
@@ -86,10 +86,15 @@ func (t *Server) readLine(ctx context.Context) (string, error) {
 
 // New creates a new stdio transport instance with the provided handler and options
 func New(ctx context.Context, newHandler transport.NewHandler, options ...Option) *Server {
+
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	ret := &Server{
 		base:      base.NewHandler(),
 		inout:     os.Stdin,
 		errWriter: os.Stderr,
+		ctx:       ctx,
 	}
 	for _, option := range options {
 		option(ret)
