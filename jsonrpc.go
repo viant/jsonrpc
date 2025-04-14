@@ -117,10 +117,10 @@ type Response struct {
 	Jsonrpc string `json:"jsonrpc" yaml:"jsonrpc" mapstructure:"jsonrpc"`
 
 	//Error
-	Error *Error `json:"error" yaml:"error" mapstructure:"error"`
+	Error *Error `json:"error,omitempty" yaml:"error,omitempty" mapstructure:"error"`
 
 	// Result corresponds to the JSON schema field "result".
-	Result json.RawMessage `json:"result,omitempty" yaml:"result" mapstructure:"result"`
+	Result json.RawMessage `json:"result,omitempty" yaml:"result,omitempty" mapstructure:"result"`
 }
 
 // NewResponse creates a new Response instance with the specified id and data.
