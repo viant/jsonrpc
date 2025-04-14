@@ -4,9 +4,6 @@ import "fmt"
 
 // Error returns the error message
 func (e *Error) Error() string {
-	if e == nil {
-		return ""
-	}
 	return fmt.Sprintf("code: %d, message: %s, data: %v", e.Code, e.Message, e.Data)
 }
 

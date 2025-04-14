@@ -52,7 +52,7 @@ func (t *Server) ListenAndServe() error {
 		if !ok {
 			return fmt.Errorf("session not found")
 		}
-		t.base.HandleMessage(t.ctx, session, []byte(line))
+		t.base.HandleMessage(t.ctx, session, []byte(line), nil)
 	}
 }
 

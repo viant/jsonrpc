@@ -44,8 +44,8 @@ func (c *Client) start(ctx context.Context) error {
 	if err := c.handleHandshake(reader); err != nil {
 		return err
 	}
-
 	go c.listenForMessages(ctx, reader)
+
 	return nil
 
 }
@@ -129,6 +129,7 @@ func (c *Client) read(ctx context.Context, reader *bufio.Reader) (*Event, error)
 			} else if strings.HasPrefix(line, "data:") {
 				event.Data = strings.TrimSpace(strings.TrimPrefix(line, "data:"))
 				hasData = true
+				return event, nil
 			}
 		}
 	}
@@ -165,10 +166,11 @@ func New(ctx context.Context, streamURL string, options ...Option) (*Client, err
 			Handler:    &base.Handler{},
 		},
 		transport: &Transport{
-			client: client,
-			host:   fmt.Sprintf("%s://%s", schema, host),
+			httpClient: client,
+			host:       fmt.Sprintf("%s://%s", schema, host),
 		},
 	}
+	ret.transport.client = ret
 	for _, opt := range options {
 		opt(ret)
 	}

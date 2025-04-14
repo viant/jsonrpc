@@ -10,21 +10,21 @@ import (
 // Option is a function that configures the Client
 type Option func(*Client)
 
-// WithClient sets the HTTP client for the SSE client
+// WithClient sets the HTTP httpClient for the SSE httpClient
 func WithClient(client *http.Client) Option {
 	return func(c *Client) {
 		c.client = client
 	}
 }
 
-// WithHandshakeTimeout sets the handshake timeout for the SSE client
+// WithHandshakeTimeout sets the handshake timeout for the SSE httpClient
 func WithHandshakeTimeout(timeout time.Duration) Option {
 	return func(c *Client) {
 		c.handshakeTimeout = timeout
 	}
 }
 
-// WithTrips sets the trips for the SSE client
+// WithTrips sets the trips for the SSE httpClient
 func WithTrips(trips *transport.RoundTrips) Option {
 	return func(c *Client) {
 		c.base.RoundTrips = trips

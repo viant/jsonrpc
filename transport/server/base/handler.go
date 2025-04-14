@@ -1,6 +1,7 @@
 package base
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -14,7 +15,7 @@ type Handler struct {
 	Sessions *collection.SyncMap[string, *Session]
 }
 
-func (e *Handler) HandleMessage(ctx context.Context, session *Session, data []byte) {
+func (e *Handler) HandleMessage(ctx context.Context, session *Session, data []byte, output *bytes.Buffer) {
 	messageType := base.MessageType(data)
 	switch messageType {
 	case jsonrpc.MessageTypeRequest:
@@ -25,7 +26,16 @@ func (e *Handler) HandleMessage(ctx context.Context, session *Session, data []by
 		}
 		response := &jsonrpc.Response{Id: request.Id, Jsonrpc: request.Jsonrpc}
 		session.Handler.Serve(ctx, request, response)
-		session.SendResponse(ctx, response)
+		if output != nil {
+			data, err := json.Marshal(response)
+			if err != nil {
+				fmt.Printf("failed to encode response: %v", err)
+				return
+			}
+			output.Write(data)
+		} else {
+			session.SendResponse(ctx, response)
+		}
 	case jsonrpc.MessageTypeResponse:
 		response := &jsonrpc.Response{}
 		if err := json.Unmarshal(data, response); err != nil {

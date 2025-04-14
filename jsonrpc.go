@@ -120,7 +120,7 @@ type Response struct {
 	Error *Error `json:"error" yaml:"error" mapstructure:"error"`
 
 	// Result corresponds to the JSON schema field "result".
-	Result json.RawMessage `json:"result" yaml:"result" mapstructure:"result"`
+	Result json.RawMessage `json:"result,omitempty" yaml:"result" mapstructure:"result"`
 }
 
 // NewResponse creates a new Response instance with the specified id and data.
@@ -152,7 +152,9 @@ func (m *Response) UnmarshalJSON(data []byte) error {
 	}
 	m.Id = *required.Id
 	m.Jsonrpc = *required.Jsonrpc
-	m.Result = *required.Result
+	if required.Result != nil {
+		m.Result = *required.Result
+	}
 	m.Error = required.Error
 	if required.Result == nil && required.Error == nil {
 		return errors.New("field result in Response: required")

@@ -1,6 +1,7 @@
 package sse
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"github.com/viant/jsonrpc/transport"
@@ -65,12 +66,11 @@ func (s *Handler) handleMessage(w http.ResponseWriter, r *http.Request) {
 	r.Body.Close()
 	ctx := r.Context() // Use the request context for handling
 	// Handle the message via the newNandler
-	s.base.HandleMessage(ctx, sess, data)
-	err = sess.Error()
-	if err != nil {
-		http.Error(w, fmt.Sprintf("failed to handle message: %v", err), http.StatusInternalServerError)
-	}
+	buffer := bytes.Buffer{}
+	s.base.HandleMessage(ctx, sess, data, &buffer)
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusAccepted)
+	w.Write(buffer.Bytes())
 }
 
 // handleSSE handles Server-Sent Events (SSE).
@@ -85,26 +85,39 @@ func (s *Handler) handleSSE(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 
 	writer := NewWriter(w) // Custom writer to handle the http.ResponseWriter
-	if err := s.initSessionHandshake(writer, r); err != nil {
+	ctx, cancel := context.WithCancel(r.Context())
+	session, err := s.initSessionHandshake(ctx, writer)
+	if err != nil {
 		http.Error(w, fmt.Sprintf("failed to initialize session: %v", err), http.StatusInternalServerError)
 		return
+	}
+
+	// Main event loop - this runs in the HTTP handler goroutine
+	for {
+		select {
+
+		case <-r.Context().Done():
+			s.base.Sessions.Delete(session.Id)
+			cancel()
+			return
+		}
 	}
 }
 
 // initSessionHandshake initializes a new session.
-func (s *Handler) initSessionHandshake(writer *Writer, r *http.Request) error {
-	aSession := base.NewSession(context.Background(), "", writer, s.newHandler, s.options...)
+func (s *Handler) initSessionHandshake(ctx context.Context, writer *Writer) (*base.Session, error) {
+	aSession := base.NewSession(ctx, "", writer, s.newHandler, s.options...)
 	query := url.Values{}
 	if err := s.locator.Set(s.sessionIdLocation, query, aSession.Id); err != nil {
-		return err
+		return nil, err
 	}
 	URI := s.messageURI + "?" + query.Encode()
 	payload := fmt.Sprintf("event: endpoint\ndata: %s\n", URI)
 	if _, err := writer.Write([]byte(payload)); err != nil {
-		return err
+		return nil, err
 	}
 	s.base.Sessions.Put(aSession.Id, aSession)
-	return nil
+	return aSession, nil
 }
 
 // New creates a new Handler instance with the provided options.
