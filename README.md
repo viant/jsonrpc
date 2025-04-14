@@ -9,7 +9,7 @@ This package implements the [JSON-RPC 2.0](https://www.jsonrpc.org/specification
 ## Features
 
 * Full implementation of the JSON-RPC 2.0 specification
-* Support for notifications, requests, and responses
+* Support for notifications, requests, responses, and batch processing
 * Customizable error handling
 * Efficient JSON marshaling and unmarshaling
 * Thread-safe implementation
@@ -80,6 +80,38 @@ func main() {
     err = client.Notify(ctx, notification)
     if err != nil {
         panic(err)
+    }
+
+    // Send a batch request
+    batchRequest := jsonrpc.BatchRequest{
+        &jsonrpc.Request{
+            Jsonrpc: "2.0",
+            Method:  "subtract",
+            Params:  []byte(`[42, 23]`),
+            Id:      1,
+        },
+        &jsonrpc.Request{
+            Jsonrpc: "2.0",
+            Method:  "subtract",
+            Params:  []byte(`[23, 42]`),
+            Id:      2,
+        },
+        // A notification (no response expected)
+        &jsonrpc.Request{
+            Jsonrpc: "2.0",
+            Method:  "update",
+            Params:  []byte(`[1,2,3,4,5]`),
+        },
+    }
+
+    responses, err := client.SendBatch(ctx, batchRequest)
+    if err != nil {
+        panic(err)
+    }
+
+    // Process batch responses
+    for i, response := range responses {
+        fmt.Printf("Response %d: %s\n", i+1, response.Result)
     }
 }
 ```

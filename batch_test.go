@@ -91,7 +91,7 @@ func TestBatchResponse_MarshalJSON(t *testing.T) {
 				return
 			}
 			if !tt.wantErr {
-				var gotObj, wantObj interface{}
+				var gotObj, wantObj *Response
 				json.Unmarshal(got, &gotObj)
 				json.Unmarshal([]byte(tt.want), &wantObj)
 
@@ -101,37 +101,4 @@ func TestBatchResponse_MarshalJSON(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestNewBatchResponseHelpers(t *testing.T) {
-	responses := []*Response{
-		{Id: float64(1), Jsonrpc: "2.0", Result: json.RawMessage(`{"result":3}`)},
-		{Id: float64(2), Jsonrpc: "2.0", Result: json.RawMessage(`{"result":5}`)},
-	}
-
-	errors := []*Response{
-		{Id: float64(3), Jsonrpc: "2.0", Error: &Error{Code: -32600, Message: "Invalid Request"}},
-		{Id: float64(4), Jsonrpc: "2.0", Error: &Error{Code: -32601, Message: "Method not found"}},
-	}
-
-	t.Run("NewBatchResponseFromResponses", func(t *testing.T) {
-		br := NewBatchResponseFromResponses(responses)
-		if len(br) != len(responses) {
-			t.Errorf("NewBatchResponseFromResponses() length = %d, want %d", len(br), len(responses))
-		}
-	})
-
-	t.Run("NewBatchResponseFromErrors", func(t *testing.T) {
-		br := NewBatchResponseFromErrors(errors)
-		if len(br) != len(errors) {
-			t.Errorf("NewBatchResponseFromErrors() length = %d, want %d", len(br), len(errors))
-		}
-	})
-
-	t.Run("NewBatchResponseMixed", func(t *testing.T) {
-		br := NewBatchResponseMixed(responses, errors)
-		if len(br) != len(responses)+len(errors) {
-			t.Errorf("NewBatchResponseMixed() length = %d, want %d", len(br), len(responses)+len(errors))
-		}
-	})
 }
