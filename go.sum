@@ -881,8 +881,8 @@ github.com/viant/afs v1.25.1-0.20231110184132-877ed98abca1/go.mod h1:rScbFd9LJPG
 github.com/viant/assertly v0.9.0/go.mod h1:aGifi++jvCrUaklKEKT0BU95igDNaqkvz+49uaYMPRU=
 github.com/viant/assertly v0.9.1-0.20220620174148-bab013f93a60 h1:VFJvCOHKXv4IqX8rJwn1otpHWQGgMDv2bXtAPgEzndM=
 github.com/viant/assertly v0.9.1-0.20220620174148-bab013f93a60/go.mod h1:aGifi++jvCrUaklKEKT0BU95igDNaqkvz+49uaYMPRU=
-github.com/viant/gosh v0.2.0 h1:dMTRPceUyPHU9cq2Ukq6B2NuH4EZxZ1AlyHmSTBF0IY=
-github.com/viant/gosh v0.2.0/go.mod h1:I/EJ39XLZL9vAme3CrvZ4WeiASneHJPd+pMF2njt/Mw=
+github.com/viant/gosh v0.2.1 h1:ASvDPh1P2gcfWEw00OnJggimwXDpmGxO0OploDjz83M=
+github.com/viant/gosh v0.2.1/go.mod h1:I/EJ39XLZL9vAme3CrvZ4WeiASneHJPd+pMF2njt/Mw=
 github.com/viant/scy v0.15.4 h1:cjqCbNIAdRIsIO3GrdI39GKbUx+jcpOvtGdgeAgVkjA=
 github.com/viant/scy v0.15.4/go.mod h1:yHDc9YmfDqhxiMPZcCRS+rb9KUjMNZniWZ9LMQoM0KI=
 github.com/viant/toolbox v0.34.5/go.mod h1:OxMCG57V0PXuIP2HNQrtJf2CjqdmbrOx5EkMILuUhzM=

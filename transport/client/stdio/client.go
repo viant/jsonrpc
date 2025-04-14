@@ -110,6 +110,7 @@ func New(command string, options ...Option) (*Client, error) {
 			RunTimeout: time.Minute,
 			Transport:  &Transport{},
 			Handler:    &base.Handler{},
+			Logger:     jsonrpc.DefaultLogger,
 		},
 	}
 	for _, opt := range options {

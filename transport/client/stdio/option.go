@@ -58,3 +58,9 @@ func WithHandler(handler transport.Handler) Option {
 		c.base.Handler = handler
 	}
 }
+
+func WithLogger(logger jsonrpc.Logger) Option {
+	return func(c *Client) {
+		c.base.Logger = logger
+	}
+}

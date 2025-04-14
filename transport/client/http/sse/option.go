@@ -43,3 +43,15 @@ func WithHandler(handler transport.Handler) Option {
 		c.base.Handler = handler
 	}
 }
+
+func WithRunTimeout(timeoutMs int) Option {
+	return func(c *Client) {
+		c.base.RunTimeout = time.Duration(timeoutMs) * time.Millisecond
+	}
+}
+
+func WithLogger(logger jsonrpc.Logger) Option {
+	return func(c *Client) {
+		c.base.Logger = logger
+	}
+}

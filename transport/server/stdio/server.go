@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"github.com/viant/jsonrpc"
 	"github.com/viant/jsonrpc/transport"
 	"github.com/viant/jsonrpc/transport/server/base"
 	"io"
@@ -31,9 +32,10 @@ func (t *Server) ListenAndServe() error {
 
 	// Ensure logger is initialized
 	if t.logger == nil {
-		t.logger = &Logger{writer: os.Stderr}
 		if t.errWriter != nil {
-			t.logger.writer = t.errWriter
+			t.logger = NewLogger(t.errWriter)
+		} else {
+			t.logger = NewLogger(jsonrpc.DefaultLogger)
 		}
 	}
 
@@ -112,7 +114,11 @@ func New(ctx context.Context, newHandler transport.NewHandler, options ...Option
 	}
 	// Initialize the logger
 	if ret.logger == nil {
-		ret.logger = &Logger{writer: ret.errWriter}
+		if ret.errWriter != nil {
+			ret.logger = NewLogger(ret.errWriter)
+		} else {
+			ret.logger = NewLogger(jsonrpc.DefaultLogger)
+		}
 	}
 	return ret
 }

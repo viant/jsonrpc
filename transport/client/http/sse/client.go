@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"github.com/viant/afs/url"
 	"github.com/viant/jsonrpc"
-	transport2 "github.com/viant/jsonrpc/transport"
+	"github.com/viant/jsonrpc/transport"
 	"github.com/viant/jsonrpc/transport/client/base"
 	"io"
 	"net/http"
@@ -162,8 +162,9 @@ func New(ctx context.Context, streamURL string, options ...Option) (*Client, err
 		done:             make(chan bool),
 		base: &base.Client{
 			RunTimeout: time.Minute,
-			RoundTrips: transport2.NewRoundTrips(100),
+			RoundTrips: transport.NewRoundTrips(100),
 			Handler:    &base.Handler{},
+			Logger:     jsonrpc.DefaultLogger,
 		},
 		transport: &Transport{
 			httpClient: client,

@@ -5,7 +5,7 @@ go 1.23.4
 require (
 	github.com/google/uuid v1.6.0
 	github.com/viant/afs v1.25.1-0.20231110184132-877ed98abca1
-	github.com/viant/gosh v0.2.0
+	github.com/viant/gosh v0.2.1
 	github.com/viant/scy v0.15.4
 	golang.org/x/crypto v0.26.0
 )

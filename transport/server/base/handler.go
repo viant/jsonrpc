@@ -13,6 +13,7 @@ import (
 // Handler represents a jsonrpc endpoint
 type Handler struct {
 	Sessions *collection.SyncMap[string, *Session]
+	Logger   jsonrpc.Logger // Logger for error messages
 }
 
 func (e *Handler) HandleMessage(ctx context.Context, session *Session, data []byte, output *bytes.Buffer) {
@@ -29,7 +30,9 @@ func (e *Handler) HandleMessage(ctx context.Context, session *Session, data []by
 		if output != nil {
 			data, err := json.Marshal(response)
 			if err != nil {
-				fmt.Printf("failed to encode response: %v", err)
+				if e.Logger != nil {
+					e.Logger.Errorf("failed to encode response: %v", err)
+				}
 				return
 			}
 			output.Write(data)
@@ -39,7 +42,9 @@ func (e *Handler) HandleMessage(ctx context.Context, session *Session, data []by
 	case jsonrpc.MessageTypeResponse:
 		response := &jsonrpc.Response{}
 		if err := json.Unmarshal(data, response); err != nil {
-			fmt.Printf("failed to parse response: %v", err)
+			if e.Logger != nil {
+				e.Logger.Errorf("failed to parse response: %v", err)
+			}
 			return
 		}
 		aTrip, err := session.RoundTrips.Match(response.Id)
@@ -52,7 +57,9 @@ func (e *Handler) HandleMessage(ctx context.Context, session *Session, data []by
 	case jsonrpc.MessageTypeNotification:
 		notification := &jsonrpc.Notification{}
 		if err := json.Unmarshal(data, notification); err != nil {
-			fmt.Printf("failed to parse notification: %v", err)
+			if e.Logger != nil {
+				e.Logger.Errorf("failed to parse notification: %v", err)
+			}
 			return
 		}
 		session.Handler.OnNotification(ctx, notification)
@@ -62,5 +69,6 @@ func (e *Handler) HandleMessage(ctx context.Context, session *Session, data []by
 func NewHandler() *Handler {
 	return &Handler{
 		Sessions: collection.NewSyncMap[string, *Session](),
+		Logger:   jsonrpc.DefaultLogger,
 	}
 }
