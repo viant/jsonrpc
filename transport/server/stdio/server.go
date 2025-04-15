@@ -2,6 +2,7 @@ package stdio
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"fmt"
 	"github.com/viant/jsonrpc"
@@ -97,6 +98,9 @@ func New(ctx context.Context, newHandler transport.NewHandler, options ...Option
 		inout:     os.Stdin,
 		errWriter: os.Stderr,
 		ctx:       ctx,
+		options: []base.Option{
+			base.WithFramer(frameStdout),
+		},
 	}
 	for _, option := range options {
 		option(ret)
@@ -121,4 +125,11 @@ func New(ctx context.Context, newHandler transport.NewHandler, options ...Option
 		}
 	}
 	return ret
+}
+
+func frameStdout(data []byte) []byte {
+	if bytes.HasSuffix(data, []byte{'\n'}) {
+		return data
+	}
+	return append(data, '\n')
 }
