@@ -64,3 +64,10 @@ func WithLogger(logger jsonrpc.Logger) Option {
 		c.base.Logger = logger
 	}
 }
+
+// WithInterceptor sets a custom interceptor for the client
+func WithInterceptor(interceptor transport.Interceptor) Option {
+	return func(c *Client) {
+		c.base.Interceptor = interceptor
+	}
+}

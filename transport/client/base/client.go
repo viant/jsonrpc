@@ -17,11 +17,12 @@ type Client struct {
 	Transport
 	Handler transport.Handler
 	*transport.RoundTrips
-	RunTimeout time.Duration
-	Listener   jsonrpc.Listener
-	Logger     jsonrpc.Logger // Logger for error messages
-	counter    uint64
-	err        error
+	RunTimeout  time.Duration
+	Listener    jsonrpc.Listener
+	Logger      jsonrpc.Logger        // Logger for error messages
+	Interceptor transport.Interceptor // Interceptor for request/response
+	counter     uint64
+	err         error
 }
 
 func (c *Client) Notify(ctx context.Context, request *jsonrpc.Notification) error {
@@ -83,8 +84,33 @@ func (c *Client) handleResponse(ctx context.Context, data []byte, message *jsonr
 		}
 		return
 	}
-	trip.SetResponse(response)
 
+	// Check for method-level interceptor first
+	var followUpRequest *jsonrpc.Request
+
+	if c.Interceptor != nil { // Fall back to global interceptor
+		followUpRequest, err = c.Interceptor.Intercept(ctx, trip.Request, response)
+		if err != nil {
+			if c.Logger != nil {
+				c.Logger.Errorf("interceptor error: %v", err)
+			}
+		}
+	}
+
+	// Send follow-up request if any interceptor returned one
+	if followUpRequest != nil {
+		resp, err := c.Send(ctx, followUpRequest)
+		if err != nil {
+			if c.Logger != nil {
+				c.Logger.Errorf("failed to send follow-up request: %v", err)
+			}
+		}
+		if resp != nil {
+			response.Result = resp.Result
+			response.Error = resp.Error
+		}
+	}
+	trip.SetResponse(response)
 }
 
 func (c *Client) handleRequest(ctx context.Context, data []byte, message *jsonrpc.Message) {
