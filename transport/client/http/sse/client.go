@@ -16,7 +16,6 @@ import (
 
 type Client struct {
 	stream           io.Reader
-	client           *http.Client
 	handshakeTimeout time.Duration
 	streamURL        string
 	messageURL       string
@@ -30,7 +29,7 @@ func (c *Client) start(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	resp, err := c.client.Do(req)
+	resp, err := c.transport.streamingClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to connect to SSE stream: %w", err)
 	}
@@ -39,7 +38,6 @@ func (c *Client) start(ctx context.Context) error {
 		_ = resp.Body.Close()
 		return fmt.Errorf("invalid status code: %d", resp.StatusCode)
 	}
-
 	reader := bufio.NewReader(resp.Body)
 	if err := c.handleHandshake(reader); err != nil {
 		return err
@@ -157,7 +155,6 @@ func New(ctx context.Context, streamURL string, options ...Option) (*Client, err
 	client := &http.Client{}
 	ret := &Client{
 		streamURL:        streamURL,
-		client:           client,
 		handshakeTimeout: time.Second * 30,
 		done:             make(chan bool),
 		base: &base.Client{
@@ -167,8 +164,9 @@ func New(ctx context.Context, streamURL string, options ...Option) (*Client, err
 			Logger:     jsonrpc.DefaultLogger,
 		},
 		transport: &Transport{
-			httpClient: client,
-			host:       fmt.Sprintf("%s://%s", schema, host),
+			rpcClient:       client,
+			streamingClient: client,
+			host:            fmt.Sprintf("%s://%s", schema, host),
 		},
 	}
 	ret.transport.client = ret

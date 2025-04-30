@@ -11,11 +11,12 @@ import (
 )
 
 type Transport struct {
-	httpClient *http.Client
-	host       string
-	endpoint   string
-	headers    http.Header
-	client     *Client
+	streamingClient *http.Client
+	rpcClient       *http.Client
+	host            string
+	endpoint        string
+	headers         http.Header
+	client          *Client
 	sync.Mutex
 }
 
@@ -37,7 +38,7 @@ func (t *Transport) SendData(ctx context.Context, data []byte) error {
 	for k, v := range t.headers {
 		req.Header[k] = v
 	}
-	resp, err := t.httpClient.Do(req)
+	resp, err := t.rpcClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to send request: %w", err)
 	}
