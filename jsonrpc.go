@@ -109,6 +109,29 @@ func (m *Notification) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// NewNotification creates a new Notification instance with the specified method and params.
+func NewNotification(method string, params interface{}) (*Notification, error) {
+	var rawParams []byte
+	switch actual := params.(type) {
+	case []byte:
+		rawParams = actual
+	case string:
+		rawParams = []byte(actual)
+	case json.RawMessage:
+		rawParams = actual
+	default:
+		var err error
+		if rawParams, err = json.Marshal(actual); err != nil {
+			return nil, err
+		}
+	}
+	return &Notification{
+		Jsonrpc: Version,   // Use the current JSON-RPC version
+		Method:  method,    // Set the method name
+		Params:  rawParams, // Initialize with an empty raw message
+	}, nil
+}
+
 type Response struct {
 	// Id corresponds to the JSON schema field "id".
 	Id RequestId `json:"id" yaml:"id" mapstructure:"id"`
