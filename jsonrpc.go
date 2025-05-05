@@ -15,7 +15,7 @@ type Error struct {
 
 	// Additional information about the error. The value of this member is defined by
 	// the sender (e.g. detailed error information, nested errors etc.).
-	Data json.RawMessagemo `json:"data,omitempty" yaml:"data,omitempty" mapstructure:"data,omitempty"`
+	Data json.RawMessage `json:"data,omitempty" yaml:"data,omitempty" mapstructure:"data,omitempty"`
 
 	// A short description of the error. The message SHOULD be limited to a concise
 	// single sentence.
