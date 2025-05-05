@@ -76,10 +76,24 @@ func NewError(
 	message string,
 	data interface{},
 ) *Error {
+
+	var rawData []byte
+
+	if data != nil {
+		switch actual := data.(type) {
+		case []byte:
+			rawData = actual
+		case string:
+			rawData = []byte(actual)
+		default:
+			rawData, _ = json.Marshal(actual)
+		}
+	}
+
 	return &Error{
 		Code:    code,
 		Message: message,
-		Data:    data,
+		Data:    rawData,
 	}
 }
 
