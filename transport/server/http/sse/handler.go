@@ -8,6 +8,7 @@ import (
 	"github.com/viant/jsonrpc"
 	"github.com/viant/jsonrpc/transport"
 	"github.com/viant/jsonrpc/transport/server/base"
+	"github.com/viant/jsonrpc/transport/server/http/session"
 	"io"
 	"net/http"
 	"net/url"
@@ -16,13 +17,9 @@ import (
 
 // Handler represents a server-side newNandler for SSE and message transport.
 type Handler struct {
-	base                       *base.Handler
-	messageURI                 string
-	sseURI                     string
-	sseSessionIdLocation       *Location // Optional sessionIdLocation for the transport, used for constructing full URIs
-	streamingSessionIdLocation *Location // Optional sessionIdLocation for the transport, used for constructing full URIs
-
-	locator    Locator
+	Options
+	base       *base.Handler
+	locator    session.Locator
 	newHandler transport.NewHandler
 	options    []base.Option
 }
@@ -30,14 +27,14 @@ type Handler struct {
 // ServeHTTP implements the http.Handler interface.
 func (s *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	uri := r.URL.Path
-	if strings.HasSuffix(uri, s.sseURI) || r.Method == http.MethodGet {
+	if strings.HasSuffix(uri, s.URI) || r.Method == http.MethodGet {
 		s.handleSSE(w, r)
 		return
 	}
 
 	switch r.Method {
 	case http.MethodDelete:
-		if sessionId, _ := s.locator.Locate(s.streamingSessionIdLocation, r); sessionId != "" {
+		if sessionId, _ := s.locator.Locate(s.StreamingSessionLocation, r); sessionId != "" {
 			s.base.Sessions.Delete(sessionId)
 			w.WriteHeader(http.StatusOK)
 		}
@@ -64,11 +61,11 @@ func (s *Handler) handleMessage(w http.ResponseWriter, r *http.Request) {
 		r.Body.Close()
 	}
 	ctx := r.Context() // Use the request context for handling
-	useStreaming := !strings.HasSuffix(r.URL.Path, s.messageURI)
+	useStreaming := !strings.HasSuffix(r.URL.Path, s.MessageURI)
 	var aSession *base.Session
-	location := s.sseSessionIdLocation
+	location := s.SessionLocation
 	if useStreaming {
-		location = s.streamingSessionIdLocation
+		location = s.StreamingSessionLocation
 	}
 	sessionId, err := s.locator.Locate(location, r)
 	if err != nil {
@@ -89,9 +86,14 @@ func (s *Handler) handleMessage(w http.ResponseWriter, r *http.Request) {
 	ctx = context.WithValue(ctx, jsonrpc.SessionKey, aSession)
 	s.base.HandleMessage(ctx, aSession, data, &buffer)
 
-	if useStreaming {
+	if buffer.Len() == 0 { //notification no response
+		w.WriteHeader(http.StatusAccepted)
+		return
+	}
+
+	if useStreaming { //forward compatibility
 		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set(s.streamingSessionIdLocation.Name, aSession.Id)
+		w.Header().Set(s.StreamingSessionLocation.Name, aSession.Id)
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(buffer.Bytes()))
 		return
@@ -120,10 +122,11 @@ func (s *Handler) handleSSE(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 
 	writer := NewWriter(w) // Custom writer to handle the http.ResponseWriter
-	ctx, cancel := context.WithCancel(r.Context())
-	session, err := s.initSessionHandshake(ctx, writer)
+	ctx, cancelFun := context.WithCancel(r.Context())
+	aSession, err := s.initSessionHandshake(ctx, writer)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("failed to initialize session: %v", err), http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("failed to initialize aSession: %v", err), http.StatusInternalServerError)
+		cancelFun()
 		return
 	}
 
@@ -132,8 +135,8 @@ func (s *Handler) handleSSE(w http.ResponseWriter, r *http.Request) {
 		select {
 
 		case <-r.Context().Done():
-			s.base.Sessions.Delete(session.Id)
-			cancel()
+			s.base.Sessions.Delete(aSession.Id)
+			cancelFun()
 			return
 		}
 	}
@@ -142,12 +145,11 @@ func (s *Handler) handleSSE(w http.ResponseWriter, r *http.Request) {
 // initSessionHandshake initializes a new session.
 func (s *Handler) initSessionHandshake(ctx context.Context, writer *Writer) (*base.Session, error) {
 	aSession := base.NewSession(ctx, "", writer, s.newHandler, s.options...)
-	ctx = context.WithValue(ctx, jsonrpc.SessionKey, aSession)
 	query := url.Values{}
-	if err := s.locator.Set(s.sseSessionIdLocation, query, aSession.Id); err != nil {
+	if err := s.locator.Set(s.SessionLocation, query, aSession.Id); err != nil {
 		return nil, err
 	}
-	URI := s.messageURI + "?" + query.Encode()
+	URI := s.MessageURI + "?" + query.Encode()
 	payload := fmt.Sprintf("event: endpoint\ndata: %s\n\n", URI)
 	if _, err := writer.Write([]byte(payload)); err != nil {
 		return nil, err
@@ -159,18 +161,20 @@ func (s *Handler) initSessionHandshake(ctx context.Context, writer *Writer) (*ba
 // New creates a new Handler instance with the provided options.
 func New(newHandler transport.NewHandler, options ...Option) *Handler {
 	ret := &Handler{
-		newHandler:                 newHandler,
-		sseURI:                     "/sse",     // Default SSE URI
-		messageURI:                 "/message", // Default message URI
-		base:                       base.NewHandler(),
-		sseSessionIdLocation:       NewQueryLocation("session_id"),
-		streamingSessionIdLocation: NewQueryLocation("Mcp-Session-Id"),
+		newHandler: newHandler,
+		Options: Options{
+			URI:                      "/sse",     // Default SSE URI
+			MessageURI:               "/message", // Default message URI
+			SessionLocation:          session.NewQueryLocation("session_id"),
+			StreamingSessionLocation: session.NewQueryLocation("Mcp-Session-Id"),
+		},
+		base: base.NewHandler(),
 		options: []base.Option{
 			base.WithFramer(frameSSE),
 		},
 	}
 	for _, opt := range options {
-		opt(ret) // Apply each option to the transport instance
+		opt(&ret.Options) // Apply each option to the transport instance
 	}
 	return ret
 }

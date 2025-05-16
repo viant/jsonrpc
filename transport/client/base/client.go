@@ -134,7 +134,7 @@ func (c *Client) handleRequest(ctx context.Context, data []byte, message *jsonrp
 
 func (c *Client) handleOnNotification(ctx context.Context, data []byte, message *jsonrpc.Message) {
 	notification := &jsonrpc.Notification{}
-	err := json.Unmarshal(data, notification)
+	err := json.Unmarshal(bytes.TrimSpace(data), notification)
 	if err != nil {
 		if c.Logger != nil {
 			c.Logger.Errorf("failed to parse notification: %v, %s", err, data)

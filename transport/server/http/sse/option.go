@@ -1,34 +1,39 @@
 package sse
 
-type Option func(t *Handler)
+import "github.com/viant/jsonrpc/transport/server/http/session"
 
-func WithSseSessionLocation(location *Location) Option {
-	// WithLocation sets the optional sessionIdLocation for the transport, used for constructing full URIs
-	return func(t *Handler) {
-		t.sseSessionIdLocation = location
+type Option func(t *Options)
+
+// WithSseSessionLocation sets the optional sessionIdLocation for the transport, used for constructing full URIs
+func WithSseSessionLocation(location *session.Location) Option {
+	return func(t *Options) {
+		t.SessionLocation = location
 	}
 }
 
-func WithStreamingSessionLocation(location *Location) Option {
-	// WithLocation sets the optional sessionIdLocation for the transport, used for constructing full URIs
-	return func(t *Handler) {
-		t.streamingSessionIdLocation = location
+// WithStreamingSessionLocation sets the optional sessionIdLocation for the transport, used for constructing full URIs
+func WithStreamingSessionLocation(location *session.Location) Option {
+	return func(t *Options) {
+		t.StreamingSessionLocation = location
 	}
 }
+
+// WithMessageURI sets the message URI for the transport
 func WithMessageURI(messageURI string) Option {
 	// WithMessageURI sets the message URI for the transport
-	return func(t *Handler) {
+	return func(t *Options) {
 		if t != nil {
-			t.messageURI = messageURI
+			t.MessageURI = messageURI
 		}
 	}
 }
 
-func WithSSEURI(sseURI string) Option {
-	// WithSSEURI sets the SSE URI for the transport
-	return func(t *Handler) {
+// WithURI sets the SSE URI for the transport
+func WithURI(sseURI string) Option {
+	// WithURI sets the SSE URI for the transport
+	return func(t *Options) {
 		if t != nil {
-			t.sseURI = sseURI
+			t.URI = sseURI
 		}
 	}
 }

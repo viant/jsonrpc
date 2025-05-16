@@ -1,4 +1,4 @@
-package sse
+package session
 
 import (
 	"fmt"
@@ -14,7 +14,6 @@ func (l *Locator) Locate(location *Location, request *http.Request) (string, err
 	if request == nil {
 		return "", fmt.Errorf("request was nil")
 	}
-
 	switch location.Kind {
 	case "header":
 		return request.Header.Get(location.Name), nil
@@ -37,4 +36,23 @@ func (l *Locator) Set(location *Location, values url.Values, id string) error {
 		return fmt.Errorf("unsupported sessionIdLocation kind: %s for name: %s", location.Kind, location.Name)
 	}
 	return nil
+}
+
+type SessionProvider struct {
+	Locator
+	Locations []*Location
+}
+
+// SessionId retrieves the session ID from the request by checking all configured locations
+func (p *SessionProvider) SessionId(request *http.Request) string {
+	if request == nil {
+		return ""
+	}
+	for _, location := range p.Locations {
+		sessionId, _ := p.Locate(location, request)
+		if sessionId != "" {
+			return sessionId
+		}
+	}
+	return ""
 }

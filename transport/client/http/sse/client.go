@@ -29,7 +29,7 @@ func (c *Client) start(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	resp, err := c.transport.streamingClient.Do(req)
+	resp, err := c.transport.sseClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to connect to SSE stream: %w", err)
 	}
@@ -127,7 +127,6 @@ func (c *Client) read(ctx context.Context, reader *bufio.Reader) (*Event, error)
 			} else if strings.HasPrefix(line, "data:") {
 				event.Data = strings.TrimSpace(strings.TrimPrefix(line, "data:"))
 				hasData = true
-				return event, nil
 			}
 		}
 	}
@@ -164,9 +163,9 @@ func New(ctx context.Context, streamURL string, options ...Option) (*Client, err
 			Logger:     jsonrpc.DefaultLogger,
 		},
 		transport: &Transport{
-			rpcClient:       client,
-			streamingClient: client,
-			host:            fmt.Sprintf("%s://%s", schema, host),
+			messageClient: client,
+			sseClient:     client,
+			host:          fmt.Sprintf("%s://%s", schema, host),
 		},
 	}
 	ret.transport.client = ret

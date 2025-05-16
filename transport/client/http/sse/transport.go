@@ -11,12 +11,12 @@ import (
 )
 
 type Transport struct {
-	streamingClient *http.Client
-	rpcClient       *http.Client
-	host            string
-	endpoint        string
-	headers         http.Header
-	client          *Client
+	sseClient     *http.Client
+	messageClient *http.Client
+	host          string
+	endpoint      string
+	headers       http.Header
+	client        *Client
 	sync.Mutex
 }
 
@@ -25,7 +25,7 @@ func (t *Transport) SendData(ctx context.Context, data []byte) error {
 	t.Mutex.Lock()
 	defer t.Mutex.Unlock()
 	if t.endpoint == "" {
-		return fmt.Errorf("Transport is not initialized - endpoint is empty")
+		return fmt.Errorf("transport is not initialized - endpoint is empty")
 	}
 	req, err := http.NewRequestWithContext(ctx, "POST", t.endpoint,
 		bytes.NewReader(data),
@@ -38,7 +38,7 @@ func (t *Transport) SendData(ctx context.Context, data []byte) error {
 	for k, v := range t.headers {
 		req.Header[k] = v
 	}
-	resp, err := t.rpcClient.Do(req)
+	resp, err := t.messageClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to send request: %w", err)
 	}

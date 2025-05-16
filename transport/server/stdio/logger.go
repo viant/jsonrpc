@@ -7,7 +7,6 @@ import (
 )
 
 // Logger provides simple logging functionality
-// Deprecated: Use jsonrpc.Logger interface instead
 type Logger struct {
 	writer io.Writer
 	logger jsonrpc.Logger

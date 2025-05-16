@@ -1,4 +1,4 @@
-package sse
+package session
 
 // Location represents the location of the sessionId
 type Location struct {

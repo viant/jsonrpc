@@ -10,27 +10,28 @@ import (
 // Option is a function that configures the Client
 type Option func(*Client)
 
-// WithStreamingHTTPClient sets the HTTP streamingClient for the SSE streamingClient
-func WithStreamingHTTPClient(client *http.Client) Option {
+// WithHttpClient sets the HTTP sseClient for the SSE sseClient
+func WithHttpClient(client *http.Client) Option {
 	return func(c *Client) {
-		c.transport.streamingClient = client
+		c.transport.sseClient = client
 	}
 }
 
-func WithRPCHTTPClient(client *http.Client) Option {
+// WithMessageHttpClient sets the message HTTP sseClient for the SSE sseClient
+func WithMessageHttpClient(client *http.Client) Option {
 	return func(c *Client) {
-		c.transport.rpcClient = client
+		c.transport.messageClient = client
 	}
 }
 
-// WithHandshakeTimeout sets the handshake timeout for the SSE streamingClient
+// WithHandshakeTimeout sets the handshake timeout for the SSE sseClient
 func WithHandshakeTimeout(timeout time.Duration) Option {
 	return func(c *Client) {
 		c.handshakeTimeout = timeout
 	}
 }
 
-// WithTrips sets the trips for the SSE streamingClient
+// WithTrips sets the trips for the SSE sseClient
 func WithTrips(trips *transport.RoundTrips) Option {
 	return func(c *Client) {
 		c.base.RoundTrips = trips
@@ -44,18 +45,21 @@ func WithListener(listener jsonrpc.Listener) Option {
 	}
 }
 
+// WithHandler sets the handler for the SSE sseClient
 func WithHandler(handler transport.Handler) Option {
 	return func(c *Client) {
 		c.base.Handler = handler
 	}
 }
 
+// WithRunTimeout sets the run timeout for the SSE sseClient
 func WithRunTimeout(timeoutMs int) Option {
 	return func(c *Client) {
 		c.base.RunTimeout = time.Duration(timeoutMs) * time.Millisecond
 	}
 }
 
+// WithLogger sets the log level for the SSE sseClient
 func WithLogger(logger jsonrpc.Logger) Option {
 	return func(c *Client) {
 		c.base.Logger = logger
