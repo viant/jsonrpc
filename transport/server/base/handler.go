@@ -28,6 +28,9 @@ func (e *Handler) HandleMessage(ctx context.Context, session *Session, data []by
 		response := &jsonrpc.Response{Id: request.Id, Jsonrpc: request.Jsonrpc}
 		session.Handler.Serve(ctx, request, response)
 		if output != nil {
+			if response.Error != nil {
+				response.Result = nil
+			}
 			data, err := json.Marshal(response)
 			if err != nil {
 				if e.Logger != nil {

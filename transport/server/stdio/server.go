@@ -106,6 +106,7 @@ func New(ctx context.Context, newHandler transport.NewHandler, options ...Option
 		option(ret)
 	}
 	aSession := base.NewSession(ctx, sessionKey, os.Stdout, newHandler, ret.options...)
+	ctx = context.WithValue(ctx, jsonrpc.SessionKey, aSession)
 	ret.base.Sessions.Put(sessionKey, aSession)
 	// Apply all options
 	for _, opt := range options {

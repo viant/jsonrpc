@@ -17,6 +17,7 @@ type Session struct {
 	Writer     io.Writer
 	Handler    transport.Handler
 	framer     FrameMessage
+	Meta       map[string]any
 	err        error
 	closed     int32
 	sync.Mutex
@@ -105,6 +106,7 @@ func NewSession(ctx context.Context, id string, writer io.Writer, newHandler tra
 	ret := &Session{
 		Id:         id,
 		Writer:     writer,
+		Meta:       make(map[string]any),
 		RoundTrips: transport.NewRoundTrips(20),
 	}
 	ret.Handler = newHandler(ctx, NewTransport(ret.RoundTrips, ret.SendData))

@@ -3,7 +3,9 @@ package sse
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"github.com/viant/jsonrpc"
 	"github.com/viant/jsonrpc/transport"
 	"github.com/viant/jsonrpc/transport/server/base"
 	"io"
@@ -63,7 +65,7 @@ func (s *Handler) handleMessage(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx := r.Context() // Use the request context for handling
 	useStreaming := !strings.HasSuffix(r.URL.Path, s.messageURI)
-	var sess *base.Session
+	var aSession *base.Session
 	location := s.sseSessionIdLocation
 	if useStreaming {
 		location = s.streamingSessionIdLocation
@@ -75,26 +77,35 @@ func (s *Handler) handleMessage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if sessionId == "" {
-		sess = base.NewSession(ctx, "", NewWriter(w), s.newHandler, s.options...)
+		aSession = base.NewSession(ctx, "", NewWriter(w), s.newHandler, s.options...)
 	} else {
 		var ok bool
-		if sess, ok = s.base.Sessions.Get(sessionId); !ok {
+		if aSession, ok = s.base.Sessions.Get(sessionId); !ok {
 			http.Error(w, fmt.Sprintf("session '%s' not found", sessionId), http.StatusNotFound)
 			return
 		}
 	}
 	buffer := bytes.Buffer{}
-	s.base.HandleMessage(ctx, sess, data, &buffer)
+	ctx = context.WithValue(ctx, jsonrpc.SessionKey, aSession)
+	s.base.HandleMessage(ctx, aSession, data, &buffer)
+
 	if useStreaming {
 		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set(s.streamingSessionIdLocation.Name, sess.Id)
+		w.Header().Set(s.streamingSessionIdLocation.Name, aSession.Id)
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(buffer.Bytes()))
 		return
 	}
+
 	w.WriteHeader(http.StatusAccepted)
 	output := fmt.Sprintf("event: message\ndata: %s\n\n", buffer.String())
-	sess.Writer.Write([]byte(output))
+	aSession.Writer.Write([]byte(output))
+}
+
+func (s *Handler) isError(buffer bytes.Buffer) bool {
+	jErr := jsonrpc.Response{}
+	json.Unmarshal(buffer.Bytes(), &jErr)
+	return jErr.Error != nil
 }
 
 // handleSSE handles Server-Sent Events (SSE).
@@ -131,6 +142,7 @@ func (s *Handler) handleSSE(w http.ResponseWriter, r *http.Request) {
 // initSessionHandshake initializes a new session.
 func (s *Handler) initSessionHandshake(ctx context.Context, writer *Writer) (*base.Session, error) {
 	aSession := base.NewSession(ctx, "", writer, s.newHandler, s.options...)
+	ctx = context.WithValue(ctx, jsonrpc.SessionKey, aSession)
 	query := url.Values{}
 	if err := s.locator.Set(s.sseSessionIdLocation, query, aSession.Id); err != nil {
 		return nil, err
