@@ -51,9 +51,11 @@ func (s *Session) SendError(ctx context.Context, error *jsonrpc.Error) {
 
 // SendResponse sends response
 func (s *Session) SendResponse(ctx context.Context, response *jsonrpc.Response) {
+	if response.Error != nil {
+		response.Result = nil
+	}
 	data, err := json.Marshal(response)
 	if err != nil {
-		fmt.Println(err)
 		return
 	}
 	s.SendData(ctx, data)

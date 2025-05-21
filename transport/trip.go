@@ -49,6 +49,9 @@ func (t *RoundTrip) SetError(error *jsonrpc.Error) {
 
 // SetResponse sets the response
 func (t *RoundTrip) SetResponse(response *jsonrpc.Response) {
+	if response.Error != nil {
+		response.Result = nil
+	}
 	t.Response = response
 	close(t.done)
 }

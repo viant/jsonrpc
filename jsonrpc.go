@@ -25,7 +25,7 @@ type Error struct {
 // Request represents a JSON-RPC request message.
 type Request struct {
 	// Id corresponds to the JSON schema field "id".
-	Id RequestId `json:"id" yaml:"id" mapstructure:"id"`
+	Id RequestId `json:"id,omitempty" yaml:"id" mapstructure:"id"`
 
 	// Jsonrpc corresponds to the JSON schema field "jsonrpc".
 	Jsonrpc string `json:"jsonrpc" yaml:"jsonrpc" mapstructure:"jsonrpc"`
