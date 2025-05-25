@@ -8,6 +8,7 @@ import (
 	"github.com/viant/jsonrpc"
 	"github.com/viant/jsonrpc/transport"
 	"github.com/viant/jsonrpc/transport/server/base"
+	"github.com/viant/jsonrpc/transport/server/http/common"
 	"github.com/viant/jsonrpc/transport/server/http/session"
 	"io"
 	"net/http"
@@ -74,7 +75,7 @@ func (s *Handler) handleMessage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if sessionId == "" {
-		aSession = base.NewSession(ctx, "", NewWriter(w), s.newHandler, s.options...)
+		aSession = base.NewSession(ctx, "", common.NewFlushWriter(w), s.newHandler, s.options...)
 	} else {
 		var ok bool
 		if aSession, ok = s.base.Sessions.Get(sessionId); !ok {
@@ -121,7 +122,7 @@ func (s *Handler) handleSSE(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 
-	writer := NewWriter(w) // Custom writer to handle the http.ResponseWriter
+	writer := common.NewFlushWriter(w) // Custom writer to handle the http.ResponseWriter
 	ctx, cancelFun := context.WithCancel(r.Context())
 	aSession, err := s.initSessionHandshake(ctx, writer)
 	if err != nil {
@@ -143,7 +144,7 @@ func (s *Handler) handleSSE(w http.ResponseWriter, r *http.Request) {
 }
 
 // initSessionHandshake initializes a new session.
-func (s *Handler) initSessionHandshake(ctx context.Context, writer *Writer) (*base.Session, error) {
+func (s *Handler) initSessionHandshake(ctx context.Context, writer *common.FlushWriter) (*base.Session, error) {
 	aSession := base.NewSession(ctx, "", writer, s.newHandler, s.options...)
 	query := url.Values{}
 	if err := s.locator.Set(s.SessionLocation, query, aSession.Id); err != nil {

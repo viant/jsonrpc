@@ -18,7 +18,6 @@ type Client struct {
 	stream           io.Reader
 	handshakeTimeout time.Duration
 	streamURL        string
-	messageURL       string
 	base             *base.Client
 	done             chan bool
 	transport        *Transport

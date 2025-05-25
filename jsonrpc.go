@@ -50,9 +50,6 @@ func (m *Request) UnmarshalJSON(data []byte) error {
 	if err != nil {
 		return err
 	}
-	if required.Id == nil {
-		return errors.New("field id in Request: required")
-	}
 	if required.Jsonrpc == nil {
 		return errors.New("field jsonrpc in Request: required")
 	}
@@ -63,7 +60,9 @@ func (m *Request) UnmarshalJSON(data []byte) error {
 		required.Params = new(json.RawMessage)
 	}
 
-	m.Id = *required.Id
+	if required.Id != nil {
+		m.Id = *required.Id
+	}
 	m.Jsonrpc = *required.Jsonrpc
 	m.Method = *required.Method
 	m.Params = *required.Params

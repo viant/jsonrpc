@@ -17,9 +17,18 @@ type Session struct {
 	Writer     io.Writer
 	Handler    transport.Handler
 	framer     FrameMessage
+
+	Seq        uint64
+	bufferSize int
+	events     []event
 	err        error
 	closed     int32
 	sync.Mutex
+}
+
+type event struct {
+	id   uint64
+	data []byte
 }
 
 // SetError sets error
@@ -94,10 +103,48 @@ func (s *Session) sendNotification(ctx context.Context, notification *jsonrpc.No
 func (s *Session) SendData(ctx context.Context, data []byte) {
 	s.Mutex.Lock()
 	defer s.Mutex.Unlock()
-	_, err := s.Writer.Write(s.frameMessage(data))
+	framed := s.frameMessage(data)
+	_, err := s.Writer.Write(framed)
 	if err != nil {
 		s.SetError(err)
 	}
+	if s.bufferSize > 0 {
+		id := s.Seq
+		s.storeEvent(id, framed)
+	}
+}
+
+func (s *Session) storeEvent(id uint64, data []byte) {
+	s.events = append(s.events, event{id: id, data: append([]byte(nil), data...)})
+	if len(s.events) > s.bufferSize {
+		// drop oldest
+		excess := len(s.events) - s.bufferSize
+		s.events = s.events[excess:]
+	}
+}
+
+// EventsAfter returns buffered framed messages with id greater than lastID.
+func (s *Session) EventsAfter(lastID uint64) [][]byte {
+	if lastID == 0 || len(s.events) == 0 {
+		res := make([][]byte, len(s.events))
+		for i, ev := range s.events {
+			res[i] = ev.data
+		}
+		return res
+	}
+	var idx int
+	// simple linear search as buffer small
+	for idx < len(s.events) && s.events[idx].id <= lastID {
+		idx++
+	}
+	if idx >= len(s.events) {
+		return nil
+	}
+	res := make([][]byte, len(s.events)-idx)
+	for i := idx; i < len(s.events); i++ {
+		res[i-idx] = s.events[i].data
+	}
+	return res
 }
 
 func NewSession(ctx context.Context, id string, writer io.Writer, newHandler transport.NewHandler, options ...Option) *Session {
