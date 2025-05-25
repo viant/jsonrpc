@@ -21,6 +21,81 @@ This package implements the [JSON-RPC 2.0](https://www.jsonrpc.org/specification
 go get github.com/viant/jsonrpc
 ```
 
+### HTTP Streamable (NDJSON) Transport – MCP compliant
+
+The *streaming* transport implements the Model Context Protocol “streamable-http” specification (2025-03-26).
+
+Key points:
+
+* Single endpoint (default `/mcp`).
+* Handshake: `POST /mcp` → returns `201 Created` with `Mcp-Session-Id` header.
+* Exchange: `POST /mcp` (with header) carries JSON-RPC messages; synchronous JSON response returned.
+* Streaming: `GET /mcp` with headers `Accept: application/x-ndjson` **and** `Mcp-Session-Id` opens a newline-delimited JSON stream.
+* Each streamed line is an envelope `{"id":<seq>,"data":<jsonrpc>}` which allows the client to resume after disconnect by sending `Last-Event-ID` header.
+
+Packages:
+
+```go
+// Server
+import streamsrv "github.com/viant/jsonrpc/transport/server/http/streaming"
+
+// Client
+import streamcli "github.com/viant/jsonrpc/transport/client/http/streaming"
+```
+
+Minimal server example:
+
+```go
+package main
+
+import (
+    "context"
+    "net/http"
+    "github.com/viant/jsonrpc"
+    "github.com/viant/jsonrpc/transport"
+    streamsrv "github.com/viant/jsonrpc/transport/server/http/streaming"
+)
+
+type handler struct{}
+
+func (h *handler) Serve(ctx context.Context, req *jsonrpc.Request, resp *jsonrpc.Response) {
+    resp.Result = []byte(`"pong"`)
+}
+
+func (h *handler) OnNotification(ctx context.Context, n *jsonrpc.Notification) {}
+
+func main() {
+    newH := func(ctx context.Context) transport.Handler { return &handler{} }
+    http.Handle("/mcp", streamsrv.New(newH))
+    _ = http.ListenAndServe(":8080", nil)
+}
+```
+
+Minimal client example:
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+    "github.com/viant/jsonrpc"
+    streamcli "github.com/viant/jsonrpc/transport/client/http/streaming"
+)
+
+func main() {
+    ctx := context.Background()
+    client, _ := streamcli.New(ctx, "http://localhost:8080/mcp")
+
+    req := &jsonrpc.Request{Jsonrpc: "2.0", Method: "ping"}
+    resp, _ := client.Send(ctx, req)
+    fmt.Println(string(resp.Result)) // pong
+}
+```
+
+Both SSE and Streamable transports share a common flush helper located at
+`transport/server/http/common`.
+
 ## Usage
 
 This package provides multiple transport implementations for JSON-RPC 2.0 communication:
@@ -170,6 +245,7 @@ func main() {
 }
 ```
 
+#
 ### HTTP Server-Sent Events (SSE) Transport
 
 The HTTP SSE transport allows JSON-RPC communication over HTTP using Server-Sent Events for real-time updates.
