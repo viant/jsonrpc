@@ -11,8 +11,8 @@ import (
 
 // Transport represents a Transport
 type Transport struct {
+	TripTimeout time.Duration
 	tripper     *transport.RoundTrips
-	tripTimeout time.Duration
 	sendData    func(ctx context.Context, data []byte)
 	counter     uint64
 }
@@ -37,7 +37,7 @@ func (s *Transport) Send(ctx context.Context, request *jsonrpc.Request) (*jsonrp
 	if err != nil {
 		return nil, err
 	}
-	err = roundTrip.Wait(ctx, s.tripTimeout)
+	err = roundTrip.Wait(ctx, s.TripTimeout)
 	if err != nil {
 		return nil, err
 	}
@@ -47,7 +47,8 @@ func (s *Transport) Send(ctx context.Context, request *jsonrpc.Request) (*jsonrp
 // NewTransport creates a new Transport
 func NewTransport(tripper *transport.RoundTrips, sendData func(ctx context.Context, data []byte)) *Transport {
 	return &Transport{
-		tripper:  tripper,
-		sendData: sendData,
+		tripper:     tripper,
+		sendData:    sendData,
+		TripTimeout: 5 * time.Minute,
 	}
 }

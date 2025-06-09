@@ -1,6 +1,7 @@
 package streaming
 
 import (
+	"github.com/viant/jsonrpc/transport"
 	"net/http"
 	"time"
 )
@@ -12,6 +13,13 @@ type Option func(*Client)
 func WithHTTPClient(client *http.Client) Option {
 	return func(c *Client) {
 		c.httpClient = client
+	}
+}
+
+// WithHandler sets the handler for the SSE sseClient
+func WithHandler(handler transport.Handler) Option {
+	return func(c *Client) {
+		c.base.Handler = handler
 	}
 }
 

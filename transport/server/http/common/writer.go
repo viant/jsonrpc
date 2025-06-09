@@ -18,7 +18,7 @@ func (w *FlushWriter) Write(p []byte) (int, error) {
 		return 0, fmt.Errorf("streaming not supported: %T does not support flushing", w.writer)
 	}
 	n, err := w.writer.Write(p)
-	if err == nil {
+	if err == nil && w.flusher != nil {
 		w.flusher.Flush()
 	}
 	return n, err
