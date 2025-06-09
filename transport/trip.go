@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/viant/jsonrpc"
-	"reflect"
 	"sync/atomic"
 	"time"
 )
@@ -128,46 +127,10 @@ func NewRoundTrips(capacity int) *RoundTrips {
 }
 
 func equals(id1 jsonrpc.RequestId, id2 any) bool {
-	id1Type := reflect.TypeOf(id1)
-	id2Type := reflect.TypeOf(id2)
-	if id1Type.Kind() == id2Type.Kind() {
-		return id1 == id2
-	}
-	switch id1Type.Kind() {
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint64:
-		id1v := asInt(id1)
-		id2v := asInt(id2)
-		return id1v == id2v
+	id1Value, ok1 := jsonrpc.AsRequestIntId(id1)
+	id2Value, ok2 := jsonrpc.AsRequestIntId(id2)
+	if ok1 && ok2 {
+		return id1Value == id2Value
 	}
 	return false
-}
-
-func asInt(v interface{}) int {
-	switch val := v.(type) {
-	case int:
-		return val
-	case int8:
-		return int(val)
-	case int16:
-		return int(val)
-	case int32:
-		return int(val)
-	case int64:
-		return int(val)
-	case uint:
-		return int(val)
-	case uint8:
-		return int(val)
-	case uint16:
-		return int(val)
-	case uint32:
-		return int(val)
-	case uint64:
-		return int(val)
-	case float32:
-		return int(val)
-	case float64:
-		return int(val)
-	}
-	return -1
 }

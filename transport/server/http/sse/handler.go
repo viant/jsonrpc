@@ -51,7 +51,6 @@ func (s *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // handleMessage handles incoming messages.
 func (s *Handler) handleMessage(w http.ResponseWriter, r *http.Request) {
-
 	var data []byte
 	var err error
 	if r.Body != nil {
@@ -61,6 +60,7 @@ func (s *Handler) handleMessage(w http.ResponseWriter, r *http.Request) {
 		}
 		r.Body.Close()
 	}
+
 	ctx := r.Context() // Use the request context for handling
 	useStreaming := !strings.HasSuffix(r.URL.Path, s.MessageURI)
 	var aSession *base.Session

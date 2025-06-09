@@ -8,6 +8,7 @@ import (
 	"github.com/viant/jsonrpc"
 	"github.com/viant/jsonrpc/internal/collection"
 	"github.com/viant/jsonrpc/transport/base"
+	"sync/atomic"
 )
 
 // Handler represents a jsonrpc endpoint
@@ -25,6 +26,13 @@ func (e *Handler) HandleMessage(ctx context.Context, session *Session, data []by
 			session.SendError(ctx, jsonrpc.NewParsingError(fmt.Sprintf("failed to parse: %v", err), data))
 			return
 		}
+		if request.Id != nil {
+			if intId, ok := jsonrpc.AsRequestIntId(request.Id); ok {
+				nextSeq := uint64(max(intId, int(session.Seq)))
+				atomic.StoreUint64(&session.Seq, nextSeq)
+			}
+		}
+
 		response := &jsonrpc.Response{Id: request.Id, Jsonrpc: request.Jsonrpc}
 		session.Handler.Serve(ctx, request, response)
 		if output != nil {

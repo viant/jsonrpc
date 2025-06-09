@@ -156,7 +156,7 @@ func New(ctx context.Context, streamURL string, options ...Option) (*Client, err
 		handshakeTimeout: time.Second * 30,
 		done:             make(chan bool),
 		base: &base.Client{
-			RunTimeout: 5 * time.Minute,
+			RunTimeout: 15 * time.Minute,
 			RoundTrips: transport.NewRoundTrips(100),
 			Handler:    &base.Handler{},
 			Logger:     jsonrpc.DefaultLogger,

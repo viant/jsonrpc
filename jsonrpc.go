@@ -8,6 +8,41 @@ import (
 // RequestId is the type used to represent the id of a JSON-RPC request.
 type RequestId any
 
+func AsRequestIntId(r RequestId) (int, bool) {
+	ret := asInt(r)
+	return ret, ret != 0
+}
+
+func asInt(v interface{}) int {
+	switch val := v.(type) {
+	case int:
+		return val
+	case int8:
+		return int(val)
+	case int16:
+		return int(val)
+	case int32:
+		return int(val)
+	case int64:
+		return int(val)
+	case uint:
+		return int(val)
+	case uint8:
+		return int(val)
+	case uint16:
+		return int(val)
+	case uint32:
+		return int(val)
+	case uint64:
+		return int(val)
+	case float32:
+		return int(val)
+	case float64:
+		return int(val)
+	}
+	return -1
+}
+
 // Error is used to provide additional information about the error that occurred.
 type Error struct {
 	// The error type that occurred.

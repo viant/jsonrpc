@@ -7,7 +7,6 @@ import (
 	"github.com/viant/afs/url"
 	"io"
 	"net/http"
-	"sync"
 )
 
 type Transport struct {
@@ -17,13 +16,10 @@ type Transport struct {
 	endpoint      string
 	headers       http.Header
 	client        *Client
-	sync.Mutex
 }
 
 // SendData sends data to the server
 func (t *Transport) SendData(ctx context.Context, data []byte) error {
-	t.Mutex.Lock()
-	defer t.Mutex.Unlock()
 	if t.endpoint == "" {
 		return fmt.Errorf("transport is not initialized - endpoint is empty")
 	}

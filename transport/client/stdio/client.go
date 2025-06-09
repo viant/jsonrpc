@@ -107,7 +107,7 @@ func New(command string, options ...Option) (*Client, error) {
 		ctx:     context.Background(),
 		base: &base.Client{
 			RoundTrips: transport2.NewRoundTrips(20),
-			RunTimeout: 5 * time.Minute,
+			RunTimeout: 15 * time.Minute,
 			Transport:  &Transport{},
 			Handler:    &base.Handler{},
 			Logger:     jsonrpc.DefaultLogger,

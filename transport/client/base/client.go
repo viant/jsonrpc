@@ -21,7 +21,7 @@ type Client struct {
 	Listener    jsonrpc.Listener
 	Logger      jsonrpc.Logger        // Logger for error messages
 	Interceptor transport.Interceptor // Interceptor for request/response
-	counter     uint64
+	Counter     uint64
 	err         error
 }
 
@@ -38,7 +38,7 @@ func (c *Client) SetError(err error) {
 }
 
 func (c *Client) Send(ctx context.Context, request *jsonrpc.Request) (*jsonrpc.Response, error) {
-	request.Id = int(atomic.AddUint64(&c.counter, 1))
+	request.Id = int(atomic.AddUint64(&c.Counter, 1))
 	trip, err := c.send(ctx, request)
 	if err != nil {
 		return nil, err // send error

@@ -14,7 +14,7 @@ type Transport struct {
 	TripTimeout time.Duration
 	tripper     *transport.RoundTrips
 	sendData    func(ctx context.Context, data []byte)
-	counter     uint64
+	session     *Session
 }
 
 func (s *Transport) Notify(ctx context.Context, notification *jsonrpc.Notification) error {
@@ -27,7 +27,7 @@ func (s *Transport) Notify(ctx context.Context, notification *jsonrpc.Notificati
 }
 
 func (s *Transport) Send(ctx context.Context, request *jsonrpc.Request) (*jsonrpc.Response, error) {
-	request.Id = int(atomic.AddUint64(&s.counter, 1))
+	request.Id = int(atomic.AddUint64(&s.session.Seq, 1))
 	data, err := json.Marshal(request)
 	if err != nil {
 		return nil, err
@@ -45,10 +45,11 @@ func (s *Transport) Send(ctx context.Context, request *jsonrpc.Request) (*jsonrp
 }
 
 // NewTransport creates a new Transport
-func NewTransport(tripper *transport.RoundTrips, sendData func(ctx context.Context, data []byte)) *Transport {
+func NewTransport(tripper *transport.RoundTrips, sendData func(ctx context.Context, data []byte), session *Session) *Transport {
 	return &Transport{
 		tripper:     tripper,
 		sendData:    sendData,
+		session:     session,
 		TripTimeout: 5 * time.Minute,
 	}
 }

@@ -156,7 +156,7 @@ func NewSession(ctx context.Context, id string, writer io.Writer, newHandler tra
 		Writer:     writer,
 		RoundTrips: transport.NewRoundTrips(20),
 	}
-	ret.Handler = newHandler(ctx, NewTransport(ret.RoundTrips, ret.SendData))
+	ret.Handler = newHandler(ctx, NewTransport(ret.RoundTrips, ret.SendData, ret))
 	for _, option := range options {
 		option(ret)
 	}

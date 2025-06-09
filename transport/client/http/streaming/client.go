@@ -162,7 +162,7 @@ func New(ctx context.Context, endpointURL string, opts ...Option) (*Client, erro
 	}
 
 	c.base = &base.Client{
-		RunTimeout: 5 * time.Minute,
+		RunTimeout: 15 * time.Minute,
 		RoundTrips: transport.NewRoundTrips(100),
 		Handler:    &base.Handler{},
 		Logger:     jsonrpc.DefaultLogger,
