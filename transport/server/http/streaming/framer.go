@@ -29,7 +29,7 @@ func frameJSON(data []byte) []byte {
 // every JSON message so the stream can be resumed with Last-Event-ID.
 func framerWithSession(s *base.Session) base.FrameMessage {
 	return func(data []byte) []byte {
-		id := atomic.AddUint64(&s.Seq, 1)
+		id := s.NextRequestID()
 		// ensure data is trimmed to single line (no newline)
 		payload := strings.TrimSpace(string(data))
 		wrapper := struct {

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"github.com/viant/jsonrpc"
 	"github.com/viant/jsonrpc/transport"
-	"sync/atomic"
 	"time"
 )
 
@@ -26,8 +25,14 @@ func (s *Transport) Notify(ctx context.Context, notification *jsonrpc.Notificati
 	return nil
 }
 
+func (s *Transport) NextRequestID() jsonrpc.RequestId {
+	return s.session.NextRequestID()
+}
+
 func (s *Transport) Send(ctx context.Context, request *jsonrpc.Request) (*jsonrpc.Response, error) {
-	request.Id = int(atomic.AddUint64(&s.session.Seq, 1))
+	if request.Id == nil {
+		request.Id = s.NextRequestID()
+	}
 	data, err := json.Marshal(request)
 	if err != nil {
 		return nil, err

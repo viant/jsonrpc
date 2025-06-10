@@ -17,12 +17,12 @@ type Client struct {
 	Transport
 	Handler transport.Handler
 	*transport.RoundTrips
-	RunTimeout  time.Duration
-	Listener    jsonrpc.Listener
-	Logger      jsonrpc.Logger        // Logger for error messages
-	Interceptor transport.Interceptor // Interceptor for request/response
-	Counter     uint64
-	err         error
+	RunTimeout   time.Duration
+	Listener     jsonrpc.Listener
+	Logger       jsonrpc.Logger        // Logger for error messages
+	Interceptor  transport.Interceptor // Interceptor for request/response
+	RequestIdSeq uint64
+	err          error
 }
 
 func (c *Client) Notify(ctx context.Context, request *jsonrpc.Notification) error {
@@ -37,8 +37,14 @@ func (c *Client) SetError(err error) {
 	c.err = err
 }
 
+func (c *Client) NextRequestID() jsonrpc.RequestId {
+	return int(atomic.AddUint64(&c.RequestIdSeq, 1))
+}
+
 func (c *Client) Send(ctx context.Context, request *jsonrpc.Request) (*jsonrpc.Response, error) {
-	request.Id = int(atomic.AddUint64(&c.Counter, 1))
+	if request.Id == nil {
+		request.Id = c.NextRequestID()
+	}
 	trip, err := c.send(ctx, request)
 	if err != nil {
 		return nil, err // send error

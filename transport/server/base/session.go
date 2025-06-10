@@ -9,21 +9,25 @@ import (
 	"github.com/viant/jsonrpc/transport"
 	"io"
 	"sync"
+	"sync/atomic"
 )
 
 type Session struct {
-	Id         string `json:"id"`
-	RoundTrips *transport.RoundTrips
-	Writer     io.Writer
-	Handler    transport.Handler
-	framer     FrameMessage
-
-	Seq        uint64
-	bufferSize int
-	events     []event
-	err        error
-	closed     int32
+	Id           string `json:"id"`
+	RoundTrips   *transport.RoundTrips
+	Writer       io.Writer
+	Handler      transport.Handler
+	framer       FrameMessage
+	RequestIdSeq uint64
+	bufferSize   int
+	events       []event
+	err          error
+	closed       int32
 	sync.Mutex
+}
+
+func (s *Session) NextRequestID() jsonrpc.RequestId {
+	return int(atomic.AddUint64(&s.RequestIdSeq, 1))
 }
 
 type event struct {
@@ -109,7 +113,7 @@ func (s *Session) SendData(ctx context.Context, data []byte) {
 		s.SetError(err)
 	}
 	if s.bufferSize > 0 {
-		id := s.Seq
+		id := atomic.AddUint64(&s.RequestIdSeq, 1)
 		s.storeEvent(id, framed)
 	}
 }

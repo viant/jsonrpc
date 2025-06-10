@@ -28,8 +28,8 @@ func (e *Handler) HandleMessage(ctx context.Context, session *Session, data []by
 		}
 		if request.Id != nil {
 			if intId, ok := jsonrpc.AsRequestIntId(request.Id); ok {
-				nextSeq := uint64(max(intId, int(session.Seq)))
-				atomic.StoreUint64(&session.Seq, nextSeq)
+				nextSeq := uint64(max(intId, int(session.RequestIdSeq)))
+				atomic.StoreUint64(&session.RequestIdSeq, nextSeq)
 			}
 		}
 
