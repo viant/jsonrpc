@@ -218,3 +218,10 @@ func (m *Response) UnmarshalJSON(data []byte) error {
 	}
 	return err
 }
+
+// TypedRequest repesents typed reuquest
+type TypedRequest[T any] struct {
+	Id      uint64 `json:"request_id"`
+	Method  string `json:"method"`
+	Request T
+}
