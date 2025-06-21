@@ -25,6 +25,12 @@ type Client struct {
 	err          error
 }
 
+// LastRequestID returns the most recently generated request id without mutating the underlying sequence.
+// It is concurrency-safe and can be used to inspect the current sequence value.
+func (c *Client) LastRequestID() jsonrpc.RequestId {
+	return int(atomic.LoadUint64(&c.RequestIdSeq))
+}
+
 func (c *Client) Notify(ctx context.Context, request *jsonrpc.Notification) error {
 	return c.sendRequest(ctx, &jsonrpc.Request{
 		Jsonrpc: jsonrpc.Version,

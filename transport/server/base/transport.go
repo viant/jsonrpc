@@ -29,6 +29,11 @@ func (s *Transport) NextRequestID() jsonrpc.RequestId {
 	return s.session.NextRequestID()
 }
 
+// LastRequestID returns the most recently generated request id without mutating the sequence.
+func (s *Transport) LastRequestID() jsonrpc.RequestId {
+	return s.session.LastRequestID()
+}
+
 func (s *Transport) Send(ctx context.Context, request *jsonrpc.Request) (*jsonrpc.Response, error) {
 	if request.Id == nil {
 		request.Id = s.NextRequestID()

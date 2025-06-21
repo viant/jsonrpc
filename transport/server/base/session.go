@@ -26,6 +26,12 @@ type Session struct {
 	sync.Mutex
 }
 
+// LastRequestID returns the most recently generated request id without mutating the underlying sequence.
+// It is concurrency-safe and can be used to inspect the current sequence value.
+func (s *Session) LastRequestID() jsonrpc.RequestId {
+	return int(atomic.LoadUint64(&s.RequestIdSeq))
+}
+
 func (s *Session) NextRequestID() jsonrpc.RequestId {
 	return int(atomic.AddUint64(&s.RequestIdSeq, 1))
 }

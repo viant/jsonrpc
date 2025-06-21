@@ -12,4 +12,8 @@ type Transport interface {
 
 type Sequencer interface {
 	NextRequestID() jsonrpc.RequestId
+
+	// LastRequestID returns the most recently generated request id without
+	// mutating the underlying sequence counter.
+	LastRequestID() jsonrpc.RequestId
 }
