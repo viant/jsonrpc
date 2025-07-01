@@ -13,11 +13,31 @@ type FlushWriter struct {
 	flusher http.Flusher
 }
 
-func (w *FlushWriter) Write(p []byte) (int, error) {
+func (w *FlushWriter) Write(p []byte) (n int, err error) {
+	// A client can close the underlying connection at any time. Unfortunately, when that
+	// happens net/http will panic inside the Write call (see golang/go#27529). To prevent
+	// the panic from crashing the whole server we recover here and convert it to a normal
+	// error that can be handled by the caller.
+	defer func() {
+		if r := recover(); r != nil {
+			// Convert the recovered value into an error that indicates the write failed due
+			// to a broken connection. We intentionally do not attempt to distinguish the
+			// exact panic reason – the caller only needs to know the write did not succeed.
+			// The panic value is included to aid diagnostics.
+			switch x := r.(type) {
+			case error:
+				err = x
+			default:
+				err = fmt.Errorf("write failed: %v", x)
+			}
+		}
+	}()
+
 	if w.flusher == nil {
 		return 0, fmt.Errorf("streaming not supported: %T does not support flushing", w.writer)
 	}
-	n, err := w.writer.Write(p)
+
+	n, err = w.writer.Write(p)
 	if err == nil && w.flusher != nil {
 		w.flusher.Flush()
 	}
