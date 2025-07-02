@@ -99,9 +99,12 @@ func (c *Client) read(ctx context.Context, reader *bufio.Reader) (*Event, error)
 		default:
 			line, err := reader.ReadString('\n')
 			if err != nil {
-				// Treat unexpected EOF the same as EOF – the stream ended cleanly.
-				if err == io.EOF || err == io.ErrUnexpectedEOF {
+				// Treat io.EOF as normal stream closure, but return error so caller can reconnect.
+				if err == io.EOF {
 					return event, nil
+				}
+				if err == io.ErrUnexpectedEOF {
+					return nil, err
 				}
 				select {
 				case <-c.done:
@@ -136,14 +139,22 @@ func (c *Client) listenForMessages(ctx context.Context, reader *bufio.Reader) {
 	for {
 		event, err := c.read(ctx, reader)
 		if err != nil {
-			c.base.SetError(err)
+			// Attempt to seamlessly reconnect the SSE stream.
+			go func() {
+				_ = c.start(ctx)
+			}()
 			return
+		}
+		// Ignore empty events (can occur during reconnect or keep-alive comments).
+		if event.Event == "" {
+			continue
 		}
 		switch event.Event {
 		case "message":
 			c.base.HandleMessage(ctx, []byte(event.Data))
 		default:
-			c.base.SetError(fmt.Errorf("unexpected event: %s", event.Event))
+			// Unrecognised event – skip instead of propagating fatal error.
+			continue
 		}
 	}
 }
