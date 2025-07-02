@@ -99,7 +99,8 @@ func (c *Client) read(ctx context.Context, reader *bufio.Reader) (*Event, error)
 		default:
 			line, err := reader.ReadString('\n')
 			if err != nil {
-				if err == io.EOF {
+				// Treat unexpected EOF the same as EOF – the stream ended cleanly.
+				if err == io.EOF || err == io.ErrUnexpectedEOF {
 					return event, nil
 				}
 				select {
