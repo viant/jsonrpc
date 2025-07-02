@@ -113,7 +113,11 @@ func (c *Client) consume(ctx context.Context, reader *bufio.Reader) {
 	for {
 		line, err := reader.ReadBytes('\n')
 		if err != nil {
-			if err != io.EOF {
+			// Network interruption may result in io.ErrUnexpectedEOF which indicates that
+			// the connection was closed before a full frame was read. Treat it the same
+			// way as io.EOF – terminate current stream reader without marking transport
+			// as failed. The higher-level code may attempt reconnection if required.
+			if err != io.EOF && err != io.ErrUnexpectedEOF {
 				c.base.SetError(err)
 			}
 			return
