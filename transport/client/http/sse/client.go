@@ -10,6 +10,7 @@ import (
 	"github.com/viant/jsonrpc/transport/client/base"
 	"io"
 	"net/http"
+	stdurl "net/url"
 	"strings"
 	"time"
 )
@@ -21,6 +22,16 @@ type Client struct {
 	base             *base.Client
 	done             chan bool
 	transport        *Transport
+
+	sessionID string
+}
+
+// sessionContext returns ctx enriched with MCP session id when available.
+func (c *Client) sessionContext(ctx context.Context) context.Context {
+	if c.sessionID == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, jsonrpc.SessionKey, c.sessionID)
 }
 
 func (c *Client) start(ctx context.Context) error {
@@ -48,11 +59,11 @@ func (c *Client) start(ctx context.Context) error {
 }
 
 func (c *Client) Notify(ctx context.Context, request *jsonrpc.Notification) error {
-	return c.base.Notify(ctx, request)
+	return c.base.Notify(c.sessionContext(ctx), request)
 }
 
 func (c *Client) Send(ctx context.Context, request *jsonrpc.Request) (*jsonrpc.Response, error) {
-	return c.base.Send(ctx, request)
+	return c.base.Send(c.sessionContext(ctx), request)
 }
 
 func (c *Client) newStreamingRequest(ctx context.Context) (*http.Request, error) {
@@ -76,6 +87,14 @@ func (c *Client) handleHandshake(reader *bufio.Reader) error {
 		c.transport.setEndpoint(event.Data)
 		if event.Data == "" {
 			return fmt.Errorf("endpoint event is empty")
+		}
+
+		// Attempt to extract session_id query parameter from the endpoint URI
+		if u, err := stdurl.Parse(event.Data); err == nil {
+			id := u.Query().Get("session_id")
+			if id != "" {
+				c.sessionID = id
+			}
 		}
 		return nil
 	default:
@@ -151,7 +170,7 @@ func (c *Client) listenForMessages(ctx context.Context, reader *bufio.Reader) {
 		}
 		switch event.Event {
 		case "message":
-			c.base.HandleMessage(ctx, []byte(event.Data))
+			c.base.HandleMessage(c.sessionContext(ctx), []byte(event.Data))
 		default:
 			// Unrecognised event – skip instead of propagating fatal error.
 			continue

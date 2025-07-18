@@ -38,14 +38,23 @@ type Client struct {
 	transport *Transport
 }
 
+// sessionContext returns a context enriched with the current MCP session id. If
+// no session id has been established yet it returns the original context.
+func (c *Client) sessionContext(ctx context.Context) context.Context {
+	if c.sessionID == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, jsonrpc.SessionKey, c.sessionID)
+}
+
 // Notify sends JSON-RPC notification.
 func (c *Client) Notify(ctx context.Context, n *jsonrpc.Notification) error {
-	return c.base.Notify(ctx, n)
+	return c.base.Notify(c.sessionContext(ctx), n)
 }
 
 // Send sends JSON-RPC request and waits for response.
 func (c *Client) Send(ctx context.Context, r *jsonrpc.Request) (*jsonrpc.Response, error) {
-	return c.base.Send(ctx, r)
+	return c.base.Send(c.sessionContext(ctx), r)
 }
 
 // start performs handshake then opens stream reader.
@@ -136,11 +145,11 @@ func (c *Client) consume(ctx context.Context, reader *bufio.Reader) {
 			if wrapper.ID > 0 {
 				c.lastID = wrapper.ID
 			}
-			c.base.HandleMessage(ctx, wrapper.Data)
+			c.base.HandleMessage(c.sessionContext(ctx), wrapper.Data)
 			continue
 		}
 		// fallback – treat entire line as JSON-RPC message (no id)
-		c.base.HandleMessage(ctx, []byte(trimmed))
+		c.base.HandleMessage(c.sessionContext(ctx), []byte(trimmed))
 	}
 }
 

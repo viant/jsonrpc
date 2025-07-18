@@ -26,6 +26,16 @@ type Client struct {
 	args      []string
 	env       map[string]string
 	ctx       context.Context
+
+	sessionID string
+}
+
+// sessionContext returns context enriched with stdio session id.
+func (c *Client) sessionContext(ctx context.Context) context.Context {
+	if c.sessionID == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, jsonrpc.SessionKey, c.sessionID)
 }
 
 func (c *Client) start(ctx context.Context) error {
@@ -67,7 +77,7 @@ func (c *Client) stdoutListener() runner.Listener {
 			defer builder.Reset()
 			builder.WriteString(stdout[:index])
 			data := []byte(builder.String())
-			c.base.HandleMessage(c.ctx, data)
+			c.base.HandleMessage(c.sessionContext(c.ctx), data)
 			return
 
 		} else {
@@ -77,11 +87,11 @@ func (c *Client) stdoutListener() runner.Listener {
 }
 
 func (c *Client) Notify(ctx context.Context, request *jsonrpc.Notification) error {
-	return c.base.Notify(ctx, request)
+	return c.base.Notify(c.sessionContext(ctx), request)
 }
 
 func (c *Client) Send(ctx context.Context, request *jsonrpc.Request) (*jsonrpc.Response, error) {
-	return c.base.Send(ctx, request)
+	return c.base.Send(c.sessionContext(ctx), request)
 }
 
 func (c *Client) ensureSSHConfig(ctx context.Context) error {
@@ -113,6 +123,10 @@ func New(command string, options ...Option) (*Client, error) {
 			Logger:     jsonrpc.DefaultLogger,
 		},
 	}
+
+	// set stdio session id and enrich internal context
+	c.sessionID = "stdio"
+	c.ctx = context.WithValue(c.ctx, jsonrpc.SessionKey, c.sessionID)
 	for _, opt := range options {
 		opt(c)
 	}
