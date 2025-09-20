@@ -5,10 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync/atomic"
+
 	"github.com/viant/jsonrpc"
 	"github.com/viant/jsonrpc/internal/collection"
 	"github.com/viant/jsonrpc/transport/base"
-	"sync/atomic"
 )
 
 // Handler represents a jsonrpc endpoint
@@ -34,6 +35,7 @@ func (e *Handler) HandleMessage(ctx context.Context, session *Session, data []by
 		}
 
 		response := &jsonrpc.Response{Id: request.Id, Jsonrpc: request.Jsonrpc}
+		ctx = context.WithValue(ctx, jsonrpc.RequestIdKey, request.Id)
 		session.Handler.Serve(ctx, request, response)
 		if output != nil {
 			if response.Error != nil {
