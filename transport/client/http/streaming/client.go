@@ -58,42 +58,6 @@ func (c *Client) Send(ctx context.Context, r *jsonrpc.Request) (*jsonrpc.Respons
 	return c.base.Send(c.sessionContext(ctx), r)
 }
 
-// start performs handshake then opens stream reader.
-func (c *Client) start(ctx context.Context) error {
-	if err := c.handshake(ctx); err != nil {
-		return err
-	}
-	return c.openStream(ctx)
-}
-
-// handshake with POST /mcp – expects session id header.
-func (c *Client) handshake(ctx context.Context) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.endpointURL, nil)
-	if err != nil {
-		return err
-	}
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("handshake failed: %w", err)
-	}
-	_ = resp.Body.Close()
-
-	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
-		return fmt.Errorf("handshake invalid status: %d", resp.StatusCode)
-	}
-
-	sessionID := resp.Header.Get(mcpSessionHeaderKey)
-	if sessionID == "" {
-		return fmt.Errorf("handshake missing %s header", mcpSessionHeaderKey)
-	}
-
-	c.sessionID = sessionID
-	c.transport.setEndpoint(c.endpointURL)
-	c.transport.headers.Set(mcpSessionHeaderKey, sessionID)
-	return nil
-}
-
 func (c *Client) openStream(ctx context.Context) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.endpointURL, nil)
 	if err != nil {
@@ -189,8 +153,5 @@ func New(ctx context.Context, endpointURL string, opts ...Option) (*Client, erro
 
 	c.transport.setEndpoint(c.endpointURL)
 
-	//if err := c.start(ctx); err != nil { stremable client does not need to initialize handshe  -that start with initialize
-	//	return nil, err
-	//}
 	return c, nil
 }

@@ -51,6 +51,17 @@ func (t *Transport) SendData(ctx context.Context, data []byte) error {
 	body, _ := io.ReadAll(resp.Body)
 	_ = resp.Body.Close()
 	if sessionID := resp.Header.Get(mcpSessionHeaderKey); sessionID != "" {
+		if t.c.sessionID == sessionID {
+
+			go func() {
+				err = t.c.openStream(ctx)
+				if err != nil {
+
+				}
+			}()
+
+		}
+
 		t.c.sessionID = sessionID
 	}
 
