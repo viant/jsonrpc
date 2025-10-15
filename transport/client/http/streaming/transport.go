@@ -50,6 +50,13 @@ func (t *Transport) SendData(ctx context.Context, data []byte) error {
 	}
 	body, _ := io.ReadAll(resp.Body)
 	_ = resp.Body.Close()
+	if sessionID := resp.Header.Get(mcpSessionHeaderKey); sessionID != "" {
+		t.c.sessionID = sessionID
+	}
+
+	if t.c.sessionID == "" {
+		return fmt.Errorf("handshake missing %s header", mcpSessionHeaderKey)
+	}
 
 	switch resp.StatusCode {
 	case http.StatusOK, http.StatusAccepted:

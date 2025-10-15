@@ -5,14 +5,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/viant/afs/url"
-	"github.com/viant/jsonrpc"
-	"github.com/viant/jsonrpc/transport"
-	"github.com/viant/jsonrpc/transport/client/base"
 	"io"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/viant/afs/url"
+	"github.com/viant/jsonrpc"
+	"github.com/viant/jsonrpc/transport"
+	"github.com/viant/jsonrpc/transport/client/base"
 )
 
 const (
@@ -186,8 +187,10 @@ func New(ctx context.Context, endpointURL string, opts ...Option) (*Client, erro
 		opt(c)
 	}
 
-	if err := c.start(ctx); err != nil {
-		return nil, err
-	}
+	c.transport.setEndpoint(c.endpointURL)
+
+	//if err := c.start(ctx); err != nil { stremable client does not need to initialize handshe  -that start with initialize
+	//	return nil, err
+	//}
 	return c, nil
 }
