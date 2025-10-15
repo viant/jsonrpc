@@ -68,12 +68,6 @@ func (h *Handler) handlePOST(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleGET(w http.ResponseWriter, r *http.Request) {
-	// Accept header must indicate NDJSON stream
-	if !acceptsNDJSON(r.Header) {
-		http.Error(w, "unsupported Accept header – expecting application/x-ndjson", http.StatusNotAcceptable)
-		return
-	}
-
 	sessionID := r.Header.Get(mcpSessionHeaderKey)
 	if sessionID == "" {
 		// Try query param fallback (for debug convenience)
