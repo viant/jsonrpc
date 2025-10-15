@@ -5,9 +5,10 @@ package streaming
 // If the payload already contains a trailing new line the data is returned unmodified.
 import (
 	"encoding/json"
+	"strings"
+
 	"github.com/viant/jsonrpc"
 	"github.com/viant/jsonrpc/transport/server/base"
-	"strings"
 )
 
 // frameJSON is kept for compatibility with earlier code (id-less framing).
@@ -29,6 +30,7 @@ func frameJSON(data []byte) []byte {
 // every JSON message so the stream can be resumed with Last-Event-ID.
 func framerWithSession(s *base.Session) base.FrameMessage {
 	return func(data []byte) []byte {
+
 		requestID := s.NextRequestID()
 		id, _ := jsonrpc.AsRequestIntId(requestID)
 		// ensure data is trimmed to single line (no newline)

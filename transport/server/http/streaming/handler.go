@@ -134,15 +134,21 @@ func (h *Handler) handleDELETE(w http.ResponseWriter, r *http.Request) {
 // initHandshake creates a new session and returns its id in response header.
 func (h *Handler) initHandshake(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+
+	//body, err := io.ReadAll(r.Body)
+	//if err != nil {
+	//	http.Error(w, err.Error(), http.StatusBadRequest)
+	//}
 	aSession := base.NewSession(ctx, "", io.Discard, h.newHandler)
 	// apply buffering & framer
 	base.WithEventBuffer(1024)(aSession)
 	base.WithFramer(framerWithSession(aSession))(aSession)
 
 	h.base.Sessions.Put(aSession.Id, aSession)
-
 	w.Header().Set(mcpSessionHeaderKey, aSession.Id)
-	w.WriteHeader(http.StatusCreated)
+	h.handleMessage(w, r, aSession.Id)
+
+	//w.WriteHeader(http.StatusCreated)
 }
 
 func (h *Handler) handleMessage(w http.ResponseWriter, r *http.Request, sessionID string) {
