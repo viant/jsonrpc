@@ -1,4 +1,4 @@
-package streaming
+package streamable
 
 import (
 	"github.com/stretchr/testify/assert"

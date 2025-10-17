@@ -72,3 +72,22 @@ func WithInterceptor(interceptor transport.Interceptor) Option {
 		c.base.Interceptor = interceptor
 	}
 }
+
+// WithProtocolVersion sets the MCP protocol version header (MCP-Protocol-Version)
+// to be included on all HTTP requests made by the SSE client (handshake GET and message POSTs).
+func WithProtocolVersion(version string) Option {
+	return func(c *Client) {
+		if version == "" {
+			return
+		}
+		// Store for GET stream requests
+		c.protocolVersion = version
+		// Ensure POST requests include the header via transport headers
+		if c.transport != nil {
+			if c.transport.headers == nil {
+				c.transport.headers = make(http.Header)
+			}
+			c.transport.headers.Set("MCP-Protocol-Version", version)
+		}
+	}
+}

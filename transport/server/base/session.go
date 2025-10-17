@@ -24,6 +24,8 @@ type Session struct {
 	err          error
 	closed       int32
 	sync.Mutex
+	// sse enables SSE id injection and matching replay ids
+	sse bool
 }
 
 // LastRequestID returns the most recently generated request id without mutating the underlying sequence.
@@ -114,6 +116,19 @@ func (s *Session) SendData(ctx context.Context, data []byte) {
 	s.Mutex.Lock()
 	defer s.Mutex.Unlock()
 	framed := s.frameMessage(data)
+	if s.sse {
+		id := atomic.AddUint64(&s.RequestIdSeq, 1)
+		prefix := []byte(fmt.Sprintf("id: %d\n", id))
+		full := append(prefix, framed...)
+		_, err := s.Writer.Write(full)
+		if err != nil {
+			s.SetError(err)
+		}
+		if s.bufferSize > 0 {
+			s.storeEvent(id, full)
+		}
+		return
+	}
 	_, err := s.Writer.Write(framed)
 	if err != nil {
 		s.SetError(err)

@@ -1,4 +1,4 @@
-package streaming
+package streamable
 
 import "github.com/viant/jsonrpc/transport/server/http/session"
 

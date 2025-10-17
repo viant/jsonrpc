@@ -24,6 +24,10 @@ type Client struct {
 	transport        *Transport
 
 	sessionID string
+
+	// protocolVersion, if set, will be sent as MCP-Protocol-Version header
+	// on all HTTP requests (GET handshake and POST messages).
+	protocolVersion string
 }
 
 // sessionContext returns ctx enriched with MCP session id when available.
@@ -74,6 +78,9 @@ func (c *Client) newStreamingRequest(ctx context.Context) (*http.Request, error)
 	req.Header.Set("Accept", "text/event-stream")
 	req.Header.Set("Cache-Control", "no-cache")
 	req.Header.Set("Connection", "keep-alive")
+	if c.protocolVersion != "" {
+		req.Header.Set("MCP-Protocol-Version", c.protocolVersion)
+	}
 	return req, nil
 }
 
@@ -196,7 +203,16 @@ func New(ctx context.Context, streamURL string, options ...Option) (*Client, err
 			messageClient: client,
 			sseClient:     client,
 			host:          fmt.Sprintf("%s://%s", schema, host),
+			headers:       make(http.Header),
 		},
+	}
+	// Default protocol version (can be overridden via option)
+	if ret.protocolVersion == "" {
+		ret.protocolVersion = "2025-06-18"
+	}
+	// Ensure POST requests include protocol version header by default
+	if ret.protocolVersion != "" {
+		ret.transport.headers.Set("MCP-Protocol-Version", ret.protocolVersion)
 	}
 	ret.transport.client = ret
 	for _, opt := range options {

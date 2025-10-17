@@ -18,3 +18,11 @@ func WithEventBuffer(size int) Option {
 		}
 	}
 }
+
+// WithSSE enables SSE id injection on each framed message and stores
+// the same id for resumability (Last-Event-ID).
+func WithSSE() Option {
+	return func(s *Session) {
+		s.sse = true
+	}
+}

@@ -28,19 +28,19 @@ The *streaming* transport implements the Model Context Protocol “streamable-ht
 Key points:
 
 * Single endpoint (default `/mcp`).
-* Handshake: `POST /mcp` → returns `201 Created` with `Mcp-Session-Id` header.
-* Exchange: `POST /mcp` (with header) carries JSON-RPC messages; synchronous JSON response returned.
-* Streaming: `GET /mcp` with headers `Accept: application/x-ndjson` **and** `Mcp-Session-Id` opens a newline-delimited JSON stream.
+* Handshake: `POST /mcp` → returns a session id header (default `Mcp-Session-Id`).
+* Exchange: `POST /mcp` (with session header) carries JSON-RPC messages; synchronous JSON response returned.
+* Streaming: `GET /mcp` with headers `Accept: application/x-ndjson` **and** the session header opens a newline-delimited JSON stream.
 * Each streamed line is an envelope `{"id":<seq>,"data":<jsonrpc>}` which allows the client to resume after disconnect by sending `Last-Event-ID` header.
 
 Packages:
 
 ```go
 // Server
-import streamsrv "github.com/viant/jsonrpc/transport/server/http/streaming"
+import streamsrv "github.com/viant/jsonrpc/transport/server/http/streamable"
 
 // Client
-import streamcli "github.com/viant/jsonrpc/transport/client/http/streaming"
+import streamcli "github.com/viant/jsonrpc/transport/client/http/streamable"
 ```
 
 Minimal server example:
@@ -53,7 +53,8 @@ import (
     "net/http"
     "github.com/viant/jsonrpc"
     "github.com/viant/jsonrpc/transport"
-    streamsrv "github.com/viant/jsonrpc/transport/server/http/streaming"
+    streamsrv "github.com/viant/jsonrpc/transport/server/http/streamable"
+    ssnsession "github.com/viant/jsonrpc/transport/server/http/session"
 )
 
 type handler struct{}
@@ -66,7 +67,10 @@ func (h *handler) OnNotification(ctx context.Context, n *jsonrpc.Notification) {
 
 func main() {
     newH := func(ctx context.Context) transport.Handler { return &handler{} }
-    http.Handle("/mcp", streamsrv.New(newH))
+    // default uses header name "Mcp-Session-Id"; customize via WithSessionLocation
+    http.Handle("/mcp", streamsrv.New(newH,
+        streamsrv.WithSessionLocation(ssnsession.NewHeaderLocation("X-Session-Id")),
+    ))
     _ = http.ListenAndServe(":8080", nil)
 }
 ```
@@ -80,12 +84,15 @@ import (
     "context"
     "fmt"
     "github.com/viant/jsonrpc"
-    streamcli "github.com/viant/jsonrpc/transport/client/http/streaming"
+    streamcli "github.com/viant/jsonrpc/transport/client/http/streamable"
 )
 
 func main() {
     ctx := context.Background()
-    client, _ := streamcli.New(ctx, "http://localhost:8080/mcp")
+    // Use the same custom header name as the server
+    client, _ := streamcli.New(ctx, "http://localhost:8080/mcp",
+        streamcli.WithSessionHeaderName("X-Session-Id"),
+    )
 
     req := &jsonrpc.Request{Jsonrpc: "2.0", Method: "ping"}
     resp, _ := client.Send(ctx, req)

@@ -1,10 +1,11 @@
-package streaming
+package streamable
 
 // frameJSON appends a new line to ensure that each JSON message is written as a single line.
 // The client side reader relies on a new line as a message delimiter.
 // If the payload already contains a trailing new line the data is returned unmodified.
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 
 	"github.com/viant/jsonrpc"
@@ -42,4 +43,9 @@ func framerWithSession(s *base.Session) base.FrameMessage {
 		b, _ := json.Marshal(&wrapper)
 		return append(b, '\n')
 	}
+}
+
+// frameSSE formats the data using SSE event/format framing.
+func frameSSE(data []byte) []byte {
+	return []byte(fmt.Sprintf("event: message\ndata: %s\n\n", strings.TrimSpace(string(data))))
 }
