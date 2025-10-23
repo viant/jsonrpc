@@ -217,6 +217,9 @@ func New(ctx context.Context, endpointURL string, opts ...Option) (*Client, erro
 		opt(c)
 	}
 
+	// Ensure the transport uses the possibly overridden HTTP client
+	c.transport.client = c.httpClient
+
 	c.transport.setEndpoint(c.endpointURL)
 	// Ensure POST requests include protocol version header by default
 	if c.protocolVersion != "" {
