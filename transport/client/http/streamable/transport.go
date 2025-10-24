@@ -54,17 +54,12 @@ func (t *Transport) SendData(ctx context.Context, data []byte) error {
 	}
 	// If server sent session id on handshake, capture it
 	if sessionID := resp.Header.Get(t.c.sessionHeaderName); sessionID != "" {
-		if t.c.sessionID == sessionID {
-
-			go func() {
-				_ = t.c.openStream(ctx)
-			}()
-
-		}
-
+		// Update known session id and ensure the GET stream is running
 		t.c.sessionID = sessionID
 		// Ensure subsequent message POSTs include the session id header
 		t.headers.Set(t.c.sessionHeaderName, sessionID)
+		// Start long-lived GET stream (reconnection handled internally)
+		t.c.ensureStream()
 	}
 
 	if t.c.sessionID == "" {

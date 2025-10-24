@@ -14,6 +14,8 @@ import (
 	"github.com/viant/jsonrpc"
 	"github.com/viant/jsonrpc/transport"
 	"github.com/viant/jsonrpc/transport/client/base"
+	"net/http/cookiejar"
+	"sync"
 )
 
 const sseMime = "text/event-stream"
@@ -43,6 +45,10 @@ type Client struct {
 	// protocolVersion, if set, will be sent as MCP-Protocol-Version header
 	// on all HTTP requests (POST/GET) made by this client.
 	protocolVersion string
+
+	// streaming control
+	streamMu     sync.Mutex
+	streamActive bool
 }
 
 // sessionContext returns a context enriched with the current MCP session id. If
@@ -88,7 +94,9 @@ func (c *Client) openStream(ctx context.Context) error {
 	}
 
 	reader := bufio.NewReader(resp.Body)
-	go c.consumeSSEGet(ctx, reader)
+	// Consume until the server closes or an error occurs; then return to caller
+	c.consumeSSEGet(ctx, reader)
+	_ = resp.Body.Close()
 	return nil
 }
 
@@ -179,12 +187,56 @@ func readSSE(ctx context.Context, reader *bufio.Reader) (*sseEvent, error) {
 	}
 }
 
+// ensureStream starts a background reconnection loop for the GET SSE stream once a session id exists.
+func (c *Client) ensureStream() {
+	c.streamMu.Lock()
+	if c.streamActive {
+		c.streamMu.Unlock()
+		return
+	}
+	c.streamActive = true
+	c.streamMu.Unlock()
+
+	go c.runStream()
+}
+
+func (c *Client) runStream() {
+	// simple exponential backoff with cap
+	backoff := 500 * time.Millisecond
+	maxBackoff := 10 * time.Second
+	for {
+		// wait until session id is available
+		if c.sessionID == "" {
+			time.Sleep(100 * time.Millisecond)
+			continue
+		}
+		// Use a background context for long-lived stream
+		ctx := context.Background()
+		if err := c.openStream(ctx); err != nil {
+			// stream couldn't be opened; back off and retry
+			time.Sleep(backoff)
+			if backoff < maxBackoff {
+				backoff *= 2
+				if backoff > maxBackoff {
+					backoff = maxBackoff
+				}
+			}
+			continue
+		}
+		// The stream ended gracefully; reset backoff and reconnect
+		backoff = 500 * time.Millisecond
+		// Loop to reconnect
+	}
+}
+
 // New initialises Client and establishes streaming connection.
 func New(ctx context.Context, endpointURL string, opts ...Option) (*Client, error) {
 	schema := url.Scheme(endpointURL, "http")
 	host := url.Host(endpointURL)
 
-	httpClient := &http.Client{}
+	// Default http.Client with cookie jar for auth session continuity, can be overridden via options
+	jar, _ := cookiejar.New(nil)
+	httpClient := &http.Client{Jar: jar}
 
 	c := &Client{
 		endpointURL:      endpointURL,
