@@ -21,17 +21,17 @@ This package implements the [JSON-RPC 2.0](https://www.jsonrpc.org/specification
 go get github.com/viant/jsonrpc
 ```
 
-### HTTP Streamable (NDJSON) Transport – MCP compliant
+### HTTP Streamable (NDJSON) Transport
 
-The *streaming* transport implements the Model Context Protocol “streamable-http” specification (2025-03-26).
+The streaming transport enables JSON-RPC over HTTP with newline-delimited JSON for server push and resumability.
 
 Key points:
 
-* Single endpoint (default `/mcp`).
-* Handshake: `POST /mcp` → returns a session id header (default `Mcp-Session-Id`).
-* Exchange: `POST /mcp` (with session header) carries JSON-RPC messages; synchronous JSON response returned.
-* Streaming: `GET /mcp` with headers `Accept: application/x-ndjson` **and** the session header opens a newline-delimited JSON stream.
-* Each streamed line is an envelope `{"id":<seq>,"data":<jsonrpc>}` which allows the client to resume after disconnect by sending `Last-Event-ID` header.
+* Single endpoint (configurable, e.g., `/rpc`).
+* Handshake: `POST <URI>` → returns a session id header (name is configurable, e.g., `X-Session-Id`).
+* Exchange: `POST <URI>` (with session header) carries JSON-RPC messages; synchronous JSON response returned.
+* Streaming: `GET <URI>` with headers `Accept: application/x-ndjson` **and** the session header opens a newline-delimited JSON stream.
+* Each streamed line is an envelope `{"id":<seq>,"data":<jsonrpc>}`. Clients can resume after disconnect using `Last-Event-ID`.
 
 Packages:
 
@@ -67,8 +67,8 @@ func (h *handler) OnNotification(ctx context.Context, n *jsonrpc.Notification) {
 
 func main() {
     newH := func(ctx context.Context) transport.Handler { return &handler{} }
-    // default uses header name "Mcp-Session-Id"; customize via WithSessionLocation
-    http.Handle("/mcp", streamsrv.New(newH,
+    // configure a custom header name for the session id
+    http.Handle("/rpc", streamsrv.New(newH,
         streamsrv.WithSessionLocation(ssnsession.NewHeaderLocation("X-Session-Id")),
     ))
     _ = http.ListenAndServe(":8080", nil)
@@ -90,7 +90,7 @@ import (
 func main() {
     ctx := context.Background()
     // Use the same custom header name as the server
-    client, _ := streamcli.New(ctx, "http://localhost:8080/mcp",
+    client, _ := streamcli.New(ctx, "http://localhost:8080/rpc",
         streamcli.WithSessionHeaderName("X-Session-Id"),
     )
 
@@ -102,6 +102,67 @@ func main() {
 
 Both SSE and Streamable transports share a common flush helper located at
 `transport/server/http/common`.
+
+### Session Lifecycle and Reconnect
+
+Both Streamable and SSE transports support graceful reconnects and eventual session cleanup.
+
+- States: Active (stream attached), Detached (stream closed; pending reconnect), Closed (removed).
+- Reconnect: When a stream disconnects, the session moves to Detached. If the client reconnects within a grace period, the server reattaches the stream and replays missed events using `Last-Event-ID`.
+- Cleanup: A background sweeper removes sessions based on configured policies and timeouts.
+
+Config options (server):
+
+- WithReconnectGrace(duration): keep Detached sessions for quick reconnects (default: 30s).
+- WithIdleTTL(duration): remove sessions idle for longer than TTL (default: 5m).
+- WithMaxLifetime(duration): hard cap on any session’s lifetime (default: 1h).
+- WithCleanupInterval(duration): sweeper cadence (default: 30s).
+- WithMaxEventBuffer(int): number of events kept for replay (default: 1024).
+- WithRemovalPolicy(policy): RemovalOnDisconnect | RemovalAfterGrace (default) | RemovalAfterIdle | RemovalManual.
+- WithOverflowPolicy(policy): OverflowDropOldest (default) | OverflowMark.
+- WithOnSessionClose(func): hook invoked before a session is finally removed.
+
+BFF cookie (optional, dev/prod modes):
+- WithBFFCookieSession(BFFCookie{Name, Secure, HttpOnly, SameSite, Path, Domain, MaxAge})
+- WithCORSAllowedOrigins([]string{"http://localhost:3000", "https://app.example.com"})
+- WithCORSAllowCredentials(true)
+Notes: In dev, set `Secure: false` to allow HTTP; in prod, keep `Secure: true` and avoid wildcard origins when credentials are used.
+
+Example (Streamable):
+
+```go
+http.Handle("/rpc", streamsrv.New(newH,
+    streamsrv.WithReconnectGrace(30*time.Second),
+    streamsrv.WithIdleTTL(5*time.Minute),
+    streamsrv.WithMaxLifetime(1*time.Hour),
+    streamsrv.WithCleanupInterval(30*time.Second),
+    streamsrv.WithMaxEventBuffer(1024),
+    streamsrv.WithRemovalPolicy(base.RemovalAfterGrace),
+))
+```
+
+Migration note: To restore legacy behavior that removed sessions immediately on disconnect, set `WithReconnectGrace(0)` and `WithRemovalPolicy(base.RemovalOnDisconnect)`.
+
+### BFF Auth Session (httpOnly cookie)
+
+For browser-based flows where the server (BFF) holds authentication, use a single httpOnly cookie to carry an opaque BFF auth session id (default name suggestion: `BFF-Auth-Session`). This id maps to durable server-side auth state in an `AuthStore` (e.g., Redis). No access or refresh tokens are exposed to the client.
+
+- Transport session header remains header-only and short-lived per client/tab.
+- Auth session: `BFF-Auth-Session` cookie persists longer and can rehydrate a new transport session on handshake when no session id is present.
+- Rehydrate: enable with `WithRehydrateOnHandshake(true)` and inject an `AuthStore` and cookie settings.
+- Logout current vs all: `DELETE` kills only the current transport session; configure a `LogoutAllPath` to revoke the BFF auth session and clear the cookie.
+
+Server options (Streamable):
+- `WithAuthStore(store)`: durable auth store (use `auth.NewRedisStore(...)` in prod or `auth.NewMemoryStore(...)` in dev/tests)
+- `WithBFFAuthCookie(&BFFAuthCookie{Name: "BFF-Auth-Session", HttpOnly: true, Secure: true, SameSite: http.SameSiteLaxMode})`
+- `WithBFFAuthCookieUseTopDomain(true)`: auto Domain=eTLD+1 (prod); omit Domain for localhost/dev
+- `WithRehydrateOnHandshake(true)`: mint new transport session using auth cookie when session is missing
+- `WithLogoutAllPath("/logout-all")`: optional path to revoke auth and clear cookie
+
+Security notes:
+- Use `Access-Control-Allow-Credentials` + exact origins (no wildcard) when sending cookies cross-site.
+- Keep cookie `Secure: true` in production; allow `Secure: false` only in dev over HTTP.
+- Consider binding the grant to device hints (UA hash, optional IP range) in your AuthStore.
 
 ## Usage
 

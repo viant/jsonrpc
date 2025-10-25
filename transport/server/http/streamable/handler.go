@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/viant/jsonrpc"
 	"github.com/viant/jsonrpc/transport"
+	authpkg "github.com/viant/jsonrpc/transport/server/auth"
 	"github.com/viant/jsonrpc/transport/server/base"
 	"github.com/viant/jsonrpc/transport/server/http/common"
 	"github.com/viant/jsonrpc/transport/server/http/session"
@@ -14,6 +15,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Default values following the MCP spec.
@@ -45,12 +47,18 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	if h.Options.LogoutAllPath != "" && strings.HasSuffix(r.URL.Path, h.Options.LogoutAllPath) {
+		h.handleLogoutAll(w, r)
+		return
+	}
 
 	switch r.Method {
 	case http.MethodPost:
 		h.handlePOST(w, r)
 	case http.MethodGet:
 		h.handleGET(w, r)
+	case http.MethodOptions:
+		h.handleOPTIONS(w, r)
 	case http.MethodDelete:
 		h.handleDELETE(w, r)
 	default:
@@ -62,6 +70,21 @@ func (h *Handler) handlePOST(w http.ResponseWriter, r *http.Request) {
 	// locate session using configured location (default: header)
 	sessionID, _ := h.locator.Locate(h.SessionLocation, r)
 	if sessionID == "" {
+		// Rehydrate MCP session using BFF auth cookie if configured
+		if h.Options.RehydrateOnHandshake && h.Options.AuthStore != nil && h.Options.AuthCookie != nil {
+			if authID := h.authCookieValue(r); authID != "" {
+				if g, err := h.Options.AuthStore.Get(r.Context(), authID); err == nil && g != nil {
+					// touch and rotate on use
+					_ = h.Options.AuthStore.Touch(r.Context(), authID, time.Now())
+					newID, err := h.Options.AuthStore.Rotate(r.Context(), authID, &authpkg.Grant{Subject: g.Subject, Scopes: g.Scopes, UAHash: g.UAHash, IPHint: g.IPHint, FamilyID: g.FamilyID})
+					if err == nil && newID != "" {
+						h.setAuthCookie(w, r, newID)
+					} else {
+						h.setAuthCookie(w, r, authID)
+					}
+				}
+			}
+		}
 		// handshake – create session
 		h.initHandshake(w, r)
 		return
@@ -81,6 +104,12 @@ func (h *Handler) handleGET(w http.ResponseWriter, r *http.Request) {
 		// Try query param fallback (for debug convenience)
 		sessionID = r.URL.Query().Get(h.SessionLocation.Name)
 	}
+	// BFF cookie fallback
+	if sessionID == "" && h.Options.CookieSession != nil {
+		if ck, err := r.Cookie(h.Options.CookieSession.Name); err == nil {
+			sessionID = ck.Value
+		}
+	}
 	if sessionID == "" {
 		http.Error(w, fmt.Sprintf("missing %s", h.SessionLocation.Name), http.StatusBadRequest)
 		return
@@ -99,13 +128,13 @@ func (h *Handler) handleGET(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", sseMime)
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
+	h.setCORSHeaders(w, r)
 
-	// Inject writer that flushes every message.
-	aSession.Writer = common.NewFlushWriter(w)
-	// Use SSE framer for this stream
+	// Reattach writer that flushes every message and switch to SSE framing
+	aSession.MarkActiveWithWriter(common.NewFlushWriter(w))
 	base.WithFramer(frameSSE)(aSession)
-	base.WithEventBuffer(1024)(aSession)
+	base.WithEventBuffer(h.Options.MaxEventBuffer)(aSession)
+	base.WithEventOverflowPolicy(h.Options.OverflowPolicy)(aSession)
 	base.WithSSE()(aSession)
 
 	// Support resumability: replay events after Last-Event-ID if provided
@@ -119,9 +148,10 @@ func (h *Handler) handleGET(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Block until client closes.
+	// Block until client closes, then mark session detached for quick reconnect.
 	<-r.Context().Done()
-	h.base.Sessions.Delete(sessionID)
+	aSession.MarkDetached()
+	aSession.Writer = nil
 }
 
 func (h *Handler) handleDELETE(w http.ResponseWriter, r *http.Request) {
@@ -144,7 +174,8 @@ func (h *Handler) initHandshake(w http.ResponseWriter, r *http.Request) {
 	//}
 	aSession := base.NewSession(ctx, "", io.Discard, h.newHandler)
 	// apply buffering; framer will be configured when streaming begins
-	base.WithEventBuffer(1024)(aSession)
+	base.WithEventBuffer(h.Options.MaxEventBuffer)(aSession)
+	base.WithEventOverflowPolicy(h.Options.OverflowPolicy)(aSession)
 
 	h.base.Sessions.Put(aSession.Id, aSession)
 	// return session id at the configured location; for header we always set header
@@ -155,6 +186,7 @@ func (h *Handler) initHandshake(w http.ResponseWriter, r *http.Request) {
 		// default to header if unspecified
 		w.Header().Set(defaultSessionHeaderKey, aSession.Id)
 	}
+	// do not set transport session cookies; MCP session id is header-only
 	h.handleMessage(w, r, aSession.Id)
 
 	//w.WriteHeader(http.StatusCreated)
@@ -182,10 +214,11 @@ func (h *Handler) handleMessage(w http.ResponseWriter, r *http.Request, sessionI
 		w.Header().Set("Content-Type", sseMime)
 		w.Header().Set("Cache-Control", "no-cache")
 		w.Header().Set("Connection", "keep-alive")
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		aSession.Writer = common.NewFlushWriter(w)
+		h.setCORSHeaders(w, r)
+		aSession.MarkActiveWithWriter(common.NewFlushWriter(w))
 		base.WithFramer(frameSSE)(aSession)
-		base.WithEventBuffer(1024)(aSession)
+		base.WithEventBuffer(h.Options.MaxEventBuffer)(aSession)
+		base.WithEventOverflowPolicy(h.Options.OverflowPolicy)(aSession)
 		base.WithSSE()(aSession)
 		// Stream response and any further messages on this connection
 		h.base.HandleMessage(ctx, aSession, data, nil)
@@ -202,6 +235,120 @@ func (h *Handler) handleMessage(w http.ResponseWriter, r *http.Request, sessionI
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(buffer.Bytes())
+}
+
+// handleOPTIONS responds to CORS preflight requests when needed.
+func (h *Handler) handleOPTIONS(w http.ResponseWriter, r *http.Request) {
+	h.setCORSHeaders(w, r)
+	if reqMethod := r.Header.Get("Access-Control-Request-Method"); reqMethod != "" {
+		w.Header().Set("Access-Control-Allow-Methods", reqMethod)
+	}
+	if reqHeaders := r.Header.Get("Access-Control-Request-Headers"); reqHeaders != "" {
+		w.Header().Set("Access-Control-Allow-Headers", reqHeaders)
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// setCORSHeaders sets Access-Control headers depending on options and request origin.
+func (h *Handler) setCORSHeaders(w http.ResponseWriter, r *http.Request) {
+	origin := r.Header.Get("Origin")
+	if h.Options.AllowCredentials {
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
+		for _, allowed := range h.Options.AllowedOrigins {
+			if allowed == origin {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+				return
+			}
+		}
+		return
+	}
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+}
+
+// handleLogoutAll revokes the BFF auth grant and clears the auth cookie.
+func (h *Handler) handleLogoutAll(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost && r.Method != http.MethodDelete {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if h.Options.AuthStore == nil || h.Options.AuthCookie == nil {
+		http.Error(w, "auth not configured", http.StatusBadRequest)
+		return
+	}
+	authID := h.authCookieValue(r)
+	if authID == "" {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	if g, err := h.Options.AuthStore.Get(r.Context(), authID); err == nil && g != nil {
+		_ = h.Options.AuthStore.RevokeFamily(r.Context(), g.FamilyID)
+	} else {
+		_ = h.Options.AuthStore.Revoke(r.Context(), authID)
+	}
+	h.clearAuthCookie(w, r)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) authCookieValue(r *http.Request) string {
+	if h.Options.AuthCookie == nil {
+		return ""
+	}
+	if ck, err := r.Cookie(h.Options.AuthCookie.Name); err == nil {
+		return ck.Value
+	}
+	return ""
+}
+
+func (h *Handler) setAuthCookie(w http.ResponseWriter, r *http.Request, id string) {
+	if h.Options.AuthCookie == nil {
+		return
+	}
+	domain := h.Options.AuthCookie.Domain
+	if domain == "" && h.Options.AuthCookieUseTopDomain {
+		if top, _ := common.TopDomain(common.ClientHost(r)); top != "" {
+			domain = top
+		}
+	}
+	ck := &http.Cookie{
+		Name:     h.Options.AuthCookie.Name,
+		Value:    id,
+		Path:     h.Options.AuthCookie.Path,
+		Domain:   domain,
+		MaxAge:   h.Options.AuthCookie.MaxAge,
+		Secure:   h.Options.AuthCookie.Secure,
+		HttpOnly: h.Options.AuthCookie.HttpOnly,
+		SameSite: h.Options.AuthCookie.SameSite,
+	}
+	if ck.Path == "" {
+		ck.Path = "/"
+	}
+	http.SetCookie(w, ck)
+}
+
+func (h *Handler) clearAuthCookie(w http.ResponseWriter, r *http.Request) {
+	if h.Options.AuthCookie == nil {
+		return
+	}
+	domain := h.Options.AuthCookie.Domain
+	if domain == "" && h.Options.AuthCookieUseTopDomain {
+		if top, _ := common.TopDomain(common.ClientHost(r)); top != "" {
+			domain = top
+		}
+	}
+	ck := &http.Cookie{
+		Name:     h.Options.AuthCookie.Name,
+		Value:    "",
+		Path:     h.Options.AuthCookie.Path,
+		Domain:   domain,
+		MaxAge:   -1,
+		Secure:   h.Options.AuthCookie.Secure,
+		HttpOnly: h.Options.AuthCookie.HttpOnly,
+		SameSite: h.Options.AuthCookie.SameSite,
+	}
+	if ck.Path == "" {
+		ck.Path = "/"
+	}
+	http.SetCookie(w, ck)
 }
 
 // Helper – checks if Accept header contains text/event-stream
@@ -244,6 +391,14 @@ func New(newHandler transport.NewHandler, opts ...Option) *Handler {
 		Options: Options{
 			URI:             defaultURI,
 			SessionLocation: session.NewHeaderLocation(defaultSessionHeaderKey),
+			// Lifecycle defaults
+			ReconnectGrace:       30 * time.Second,
+			IdleTTL:              5 * time.Minute,
+			MaxLifetime:          1 * time.Hour,
+			CleanupInterval:      30 * time.Second,
+			MaxEventBuffer:       1024,
+			RemovalPolicy:        base.RemovalAfterGrace,
+			RehydrateOnHandshake: true,
 		},
 		base: base.NewHandler(),
 		options: []base.Option{
@@ -253,5 +408,68 @@ func New(newHandler transport.NewHandler, opts ...Option) *Handler {
 	for _, o := range opts {
 		o(&h.Options)
 	}
+	// allow custom session store injection
+	if h.Options.Store != nil {
+		h.base.Sessions = h.Options.Store
+	}
+	// start cleanup sweeper if configured
+	if h.Options.CleanupInterval > 0 {
+		go h.runSweeper()
+	}
 	return h
+}
+
+// runSweeper periodically removes sessions based on lifecycle options.
+func (h *Handler) runSweeper() {
+	ticker := time.NewTicker(h.Options.CleanupInterval)
+	defer ticker.Stop()
+	for range ticker.C {
+		now := time.Now()
+		var toDelete []string
+		h.base.Sessions.Range(func(id string, sess *base.Session) bool {
+			remove := false
+			// Max lifetime
+			if h.Options.MaxLifetime > 0 && now.Sub(sess.CreatedAt) > h.Options.MaxLifetime {
+				remove = true
+			}
+			// Idle TTL
+			if !remove && h.Options.IdleTTL > 0 && now.Sub(sess.LastSeen) > h.Options.IdleTTL {
+				remove = true
+			}
+			// Policy-based detach handling
+			if !remove {
+				switch h.Options.RemovalPolicy {
+				case base.RemovalOnDisconnect:
+					if sess.State == base.SessionStateDetached {
+						remove = true
+					}
+				case base.RemovalAfterGrace:
+					if sess.State == base.SessionStateDetached && h.Options.ReconnectGrace > 0 && sess.DetachedAt != nil {
+						if now.Sub(*sess.DetachedAt) > h.Options.ReconnectGrace {
+							remove = true
+						}
+					}
+				case base.RemovalAfterIdle:
+					// already covered by IdleTTL; nothing extra
+				case base.RemovalManual:
+					// do nothing here
+				}
+			}
+			if remove {
+				toDelete = append(toDelete, id)
+			}
+			return true
+		})
+		for _, id := range toDelete {
+			if h.Options.OnSessionClose != nil {
+				if sess, ok := h.base.Sessions.Get(id); ok {
+					func() {
+						defer func() { _ = recover() }()
+						h.Options.OnSessionClose(sess)
+					}()
+				}
+			}
+			h.base.Sessions.Delete(id)
+		}
+	}
 }

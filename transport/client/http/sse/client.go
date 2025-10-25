@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	stdurl "net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -25,9 +26,17 @@ type Client struct {
 
 	sessionID string
 
+	// lastEventID tracks the last received SSE id for resumability
+	lastEventID uint64
+
 	// protocolVersion, if set, will be sent as MCP-Protocol-Version header
 	// on all HTTP requests (GET handshake and POST messages).
 	protocolVersion string
+
+	// streamSessionParamName defines the query parameter name used to carry
+	// session id on reconnect GET requests. Defaults to "Mcp-Session-Id" to
+	// align with server default, but can be overridden via option.
+	streamSessionParamName string
 }
 
 // sessionContext returns ctx enriched with MCP session id when available.
@@ -70,8 +79,21 @@ func (c *Client) Send(ctx context.Context, request *jsonrpc.Request) (*jsonrpc.R
 	return c.base.Send(c.sessionContext(ctx), request)
 }
 
+// SessionID returns the current session id if known.
+func (c *Client) SessionID() string { return c.sessionID }
+
 func (c *Client) newStreamingRequest(ctx context.Context) (*http.Request, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", c.streamURL, nil)
+	// If session id is known, append as query param to support server-side session reuse
+	urlStr := c.streamURL
+	if c.sessionID != "" && c.streamSessionParamName != "" {
+		if u, err := stdurl.Parse(urlStr); err == nil {
+			q := u.Query()
+			q.Set(c.streamSessionParamName, c.sessionID)
+			u.RawQuery = q.Encode()
+			urlStr = u.String()
+		}
+	}
+	req, err := http.NewRequestWithContext(ctx, "GET", urlStr, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -80,6 +102,9 @@ func (c *Client) newStreamingRequest(ctx context.Context) (*http.Request, error)
 	req.Header.Set("Connection", "keep-alive")
 	if c.protocolVersion != "" {
 		req.Header.Set("MCP-Protocol-Version", c.protocolVersion)
+	}
+	if c.lastEventID > 0 {
+		req.Header.Set("Last-Event-ID", fmt.Sprintf("%d", c.lastEventID))
 	}
 	return req, nil
 }
@@ -150,7 +175,9 @@ func (c *Client) read(ctx context.Context, reader *bufio.Reader) (*Event, error)
 				continue
 			}
 
-			if strings.HasPrefix(line, "event:") {
+			if strings.HasPrefix(line, "id:") {
+				event.ID = strings.TrimSpace(strings.TrimPrefix(line, "id:"))
+			} else if strings.HasPrefix(line, "event:") {
 				event.Event = strings.TrimSpace(strings.TrimPrefix(line, "event:"))
 				hasEvent = true
 			} else if strings.HasPrefix(line, "data:") {
@@ -174,6 +201,12 @@ func (c *Client) listenForMessages(ctx context.Context, reader *bufio.Reader) {
 		// Ignore empty events (can occur during reconnect or keep-alive comments).
 		if event.Event == "" {
 			continue
+		}
+		// Track last received event id for Last-Event-ID resumability
+		if event.ID != "" {
+			if v, err := strconv.ParseUint(strings.TrimSpace(event.ID), 10, 64); err == nil {
+				c.lastEventID = v
+			}
 		}
 		switch event.Event {
 		case "message":
@@ -209,6 +242,10 @@ func New(ctx context.Context, streamURL string, options ...Option) (*Client, err
 	// Default protocol version (can be overridden via option)
 	if ret.protocolVersion == "" {
 		ret.protocolVersion = "2025-06-18"
+	}
+	// Default streaming session param name aligns with server default
+	if ret.streamSessionParamName == "" {
+		ret.streamSessionParamName = "Mcp-Session-Id"
 	}
 	// Ensure POST requests include protocol version header by default
 	if ret.protocolVersion != "" {

@@ -66,3 +66,25 @@ func WithProtocolVersion(version string) Option {
 		}
 	}
 }
+
+// WithSessionID sets an explicit session id for the client. When set, the
+// client immediately applies the session header to POST requests and uses the
+// same header on GET stream requests, allowing reconnects without a handshake.
+// It also starts the background stream loop.
+func WithSessionID(id string) Option {
+	return func(c *Client) {
+		if id == "" {
+			return
+		}
+		c.sessionID = id
+		if c.transport != nil && c.transport.headers != nil {
+			// Ensure POSTs include the session header immediately
+			if c.sessionHeaderName == "" {
+				c.sessionHeaderName = "Mcp-Session-Id"
+			}
+			c.transport.headers.Set(c.sessionHeaderName, id)
+		}
+		// Ensure the stream is running
+		c.ensureStream()
+	}
+}

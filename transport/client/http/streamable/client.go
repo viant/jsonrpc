@@ -70,6 +70,9 @@ func (c *Client) Send(ctx context.Context, r *jsonrpc.Request) (*jsonrpc.Respons
 	return c.base.Send(c.sessionContext(ctx), r)
 }
 
+// SessionID returns the currently configured or negotiated session id.
+func (c *Client) SessionID() string { return c.sessionID }
+
 func (c *Client) openStream(ctx context.Context) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.endpointURL, nil)
 	if err != nil {

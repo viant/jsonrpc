@@ -91,3 +91,26 @@ func WithProtocolVersion(version string) Option {
 		}
 	}
 }
+
+// WithSessionID sets an explicit session identifier which will be appended
+// to streaming GET requests so the server can reuse the same session after
+// reconnects. It does not bypass the SSE handshake used to obtain message
+// endpoint URI.
+func WithSessionID(id string) Option {
+	return func(c *Client) {
+		if id == "" {
+			return
+		}
+		c.sessionID = id
+	}
+}
+
+// WithStreamSessionParamName configures the query parameter name used on
+// the streaming GET request to carry the session id (default: Mcp-Session-Id).
+func WithStreamSessionParamName(name string) Option {
+	return func(c *Client) {
+		if name != "" {
+			c.streamSessionParamName = name
+		}
+	}
+}

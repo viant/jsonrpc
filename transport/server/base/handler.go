@@ -8,17 +8,20 @@ import (
 	"sync/atomic"
 
 	"github.com/viant/jsonrpc"
-	"github.com/viant/jsonrpc/internal/collection"
 	"github.com/viant/jsonrpc/transport/base"
 )
 
 // Handler represents a jsonrpc endpoint
 type Handler struct {
-	Sessions *collection.SyncMap[string, *Session]
+	Sessions SessionStore
 	Logger   jsonrpc.Logger // Logger for error messages
 }
 
 func (e *Handler) HandleMessage(ctx context.Context, session *Session, data []byte, output *bytes.Buffer) {
+	// record activity
+	if session != nil {
+		session.Touch()
+	}
 	messageType := base.MessageType(data)
 	switch messageType {
 	case jsonrpc.MessageTypeRequest:
@@ -81,7 +84,7 @@ func (e *Handler) HandleMessage(ctx context.Context, session *Session, data []by
 
 func NewHandler() *Handler {
 	return &Handler{
-		Sessions: collection.NewSyncMap[string, *Session](),
+		Sessions: NewMemorySessionStore(),
 		Logger:   jsonrpc.DefaultLogger,
 	}
 }

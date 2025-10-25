@@ -26,3 +26,20 @@ func WithSSE() Option {
 		s.sse = true
 	}
 }
+
+// OverflowPolicy defines how the event buffer handles overflow.
+type OverflowPolicy int
+
+const (
+	// OverflowDropOldest drops the oldest events when the buffer is full.
+	OverflowDropOldest OverflowPolicy = iota
+	// OverflowMark sets an overflow flag when buffer would overflow, while still dropping oldest.
+	OverflowMark
+)
+
+// WithEventOverflowPolicy sets the overflow policy for event buffering.
+func WithEventOverflowPolicy(policy OverflowPolicy) Option {
+	return func(s *Session) {
+		s.overflowPolicy = policy
+	}
+}

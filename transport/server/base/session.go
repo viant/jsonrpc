@@ -10,6 +10,7 @@ import (
 	"io"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 type Session struct {
@@ -26,6 +27,20 @@ type Session struct {
 	sync.Mutex
 	// sse enables SSE id injection and matching replay ids
 	sse bool
+
+	// Lifecycle metadata
+	CreatedAt     time.Time
+	LastSeen      time.Time
+	DetachedAt    *time.Time
+	State         SessionState
+	WriterPresent bool
+
+	// buffer overflow handling
+	overflowPolicy OverflowPolicy
+	overflowed     bool
+
+	// writerGen increments on each writer (re)attachment to guard concurrent writers.
+	writerGen uint64
 }
 
 // LastRequestID returns the most recently generated request id without mutating the underlying sequence.
@@ -115,23 +130,28 @@ func (s *Session) sendNotification(ctx context.Context, notification *jsonrpc.No
 func (s *Session) SendData(ctx context.Context, data []byte) {
 	s.Mutex.Lock()
 	defer s.Mutex.Unlock()
+	s.LastSeen = time.Now()
 	framed := s.frameMessage(data)
 	if s.sse {
 		id := atomic.AddUint64(&s.RequestIdSeq, 1)
 		prefix := []byte(fmt.Sprintf("id: %d\n", id))
 		full := append(prefix, framed...)
-		_, err := s.Writer.Write(full)
-		if err != nil {
-			s.SetError(err)
+		if s.Writer != nil {
+			_, err := s.Writer.Write(full)
+			if err != nil {
+				s.SetError(err)
+			}
 		}
 		if s.bufferSize > 0 {
 			s.storeEvent(id, full)
 		}
 		return
 	}
-	_, err := s.Writer.Write(framed)
-	if err != nil {
-		s.SetError(err)
+	if s.Writer != nil {
+		_, err := s.Writer.Write(framed)
+		if err != nil {
+			s.SetError(err)
+		}
 	}
 	if s.bufferSize > 0 {
 		id := atomic.AddUint64(&s.RequestIdSeq, 1)
@@ -142,6 +162,10 @@ func (s *Session) SendData(ctx context.Context, data []byte) {
 func (s *Session) storeEvent(id uint64, data []byte) {
 	s.events = append(s.events, event{id: id, data: append([]byte(nil), data...)})
 	if len(s.events) > s.bufferSize {
+		// handle overflow
+		if s.overflowPolicy == OverflowMark {
+			s.overflowed = true
+		}
 		// drop oldest
 		excess := len(s.events) - s.bufferSize
 		s.events = s.events[excess:]
@@ -177,13 +201,60 @@ func NewSession(ctx context.Context, id string, writer io.Writer, newHandler tra
 		id = uuid.New().String()
 	}
 	ret := &Session{
-		Id:         id,
-		Writer:     writer,
-		RoundTrips: transport.NewRoundTrips(20),
+		Id:            id,
+		Writer:        writer,
+		RoundTrips:    transport.NewRoundTrips(20),
+		CreatedAt:     time.Now(),
+		LastSeen:      time.Now(),
+		State:         SessionStateActive,
+		WriterPresent: writer != nil,
 	}
 	ret.Handler = newHandler(ctx, NewTransport(ret.RoundTrips, ret.SendData, ret))
 	for _, option := range options {
 		option(ret)
 	}
 	return ret
+}
+
+// SessionState represents lifecycle state of a session.
+type SessionState int
+
+const (
+	SessionStateActive SessionState = iota
+	SessionStateDetached
+	SessionStateClosed
+)
+
+// Touch updates LastSeen timestamp.
+func (s *Session) Touch() {
+	s.Mutex.Lock()
+	s.LastSeen = time.Now()
+	s.Mutex.Unlock()
+}
+
+// MarkDetached marks session as detached and records time.
+func (s *Session) MarkDetached() {
+	s.Mutex.Lock()
+	now := time.Now()
+	s.DetachedAt = &now
+	s.State = SessionStateDetached
+	s.WriterPresent = false
+	s.Mutex.Unlock()
+}
+
+// MarkActiveWithWriter re-attaches a writer and marks session active.
+func (s *Session) MarkActiveWithWriter(w io.Writer) {
+	s.Mutex.Lock()
+	s.Writer = w
+	s.WriterPresent = w != nil
+	s.State = SessionStateActive
+	s.DetachedAt = nil
+	s.LastSeen = time.Now()
+	atomic.AddUint64(&s.writerGen, 1)
+	s.Mutex.Unlock()
+}
+
+// WriterGeneration returns the current writer attachment generation.
+func (s *Session) WriterGeneration() uint64 {
+	return atomic.LoadUint64(&s.writerGen)
 }
