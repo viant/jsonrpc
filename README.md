@@ -153,7 +153,7 @@ For browser-based flows where the server (BFF) holds authentication, use a singl
 - Logout current vs all: `DELETE` kills only the current transport session; configure a `LogoutAllPath` to revoke the BFF auth session and clear the cookie.
 
 Server options (Streamable):
-- `WithAuthStore(store)`: durable auth store (use `auth.NewRedisStore(...)` in prod or `auth.NewMemoryStore(...)` in dev/tests)
+- `WithAuthStore(store)`: pluggable durable auth store (default is in-memory; supply your own e.g. Redis-backed implementation)
 - `WithBFFAuthCookie(&BFFAuthCookie{Name: "BFF-Auth-Session", HttpOnly: true, Secure: true, SameSite: http.SameSiteLaxMode})`
 - `WithBFFAuthCookieUseTopDomain(true)`: auto Domain=eTLD+1 (prod); omit Domain for localhost/dev
 - `WithRehydrateOnHandshake(true)`: mint new transport session using auth cookie when session is missing
@@ -163,6 +163,66 @@ Security notes:
 - Use `Access-Control-Allow-Credentials` + exact origins (no wildcard) when sending cookies cross-site.
 - Keep cookie `Secure: true` in production; allow `Secure: false` only in dev over HTTP.
 - Consider binding the grant to device hints (UA hash, optional IP range) in your AuthStore.
+
+### Custom AuthStore (implement your own)
+
+You can provide a durable store by implementing the `auth.Store` interface and passing it via `WithAuthStore(store)`. Example skeleton:
+
+```go
+package mystore
+
+import (
+    "context"
+    "time"
+    "github.com/viant/jsonrpc/transport/server/auth"
+)
+
+type Store struct {
+    // add fields for DB/Redis client here
+}
+
+func New() *Store { return &Store{} }
+
+func (s *Store) Put(ctx context.Context, g *auth.Grant) error {
+    // persist g (apply TTLs using g.ExpiresAt, g.MaxExpiresAt)
+    return nil
+}
+
+func (s *Store) Get(ctx context.Context, id string) (*auth.Grant, error) {
+    // load by id; return auth.ErrNotFound if missing/expired
+    return nil, auth.ErrNotFound
+}
+
+func (s *Store) Touch(ctx context.Context, id string, at time.Time) error {
+    // slide idle TTL (update LastUsedAt/ExpiresAt; clamp to MaxExpiresAt)
+    return nil
+}
+
+func (s *Store) Rotate(ctx context.Context, oldID string, newGrant *auth.Grant) (string, error) {
+    // atomically create new id in same FamilyID; keep old valid briefly (grace)
+    return "", nil
+}
+
+func (s *Store) Revoke(ctx context.Context, id string) error {
+    // delete single grant
+    return nil
+}
+
+func (s *Store) RevokeFamily(ctx context.Context, familyID string) error {
+    // delete all grants in the family
+    return nil
+}
+```
+
+Wiring it into the server:
+
+```go
+srv := streamable.New(newHandler,
+    streamable.WithAuthStore(mystore.New()),
+    streamable.WithBFFAuthCookie(&streamable.BFFAuthCookie{Name: "BFF-Auth-Session", HttpOnly: true, Secure: true}),
+    streamable.WithRehydrateOnHandshake(true),
+)
+```
 
 ## Usage
 
