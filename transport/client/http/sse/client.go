@@ -58,6 +58,11 @@ func (c *Client) start(ctx context.Context) error {
 	}
 
 	if resp.StatusCode != http.StatusOK {
+		if resp.StatusCode == http.StatusUnauthorized {
+			body, _ := io.ReadAll(resp.Body)
+			_ = resp.Body.Close()
+			return jsonrpc.NewUnauthorizedError(resp.StatusCode, body)
+		}
 		_ = resp.Body.Close()
 		return fmt.Errorf("invalid status code: %d", resp.StatusCode)
 	}

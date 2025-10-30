@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+
+	"github.com/viant/jsonrpc"
 )
 
 // Transport implements client side sender for the streaming HTTP transport. It
@@ -86,6 +88,8 @@ func (t *Transport) SendData(ctx context.Context, data []byte) error {
 		if len(body) > 0 {
 			t.c.base.HandleMessage(ctx, body)
 		}
+	case http.StatusUnauthorized:
+		return jsonrpc.NewUnauthorizedError(resp.StatusCode, body)
 	default:
 		return fmt.Errorf("invalid status code: %d: %s", resp.StatusCode, string(body))
 	}

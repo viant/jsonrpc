@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/viant/afs/url"
 	"io"
 	"net/http"
+
+	"github.com/viant/afs/url"
+	"github.com/viant/jsonrpc"
 )
 
 type Transport struct {
@@ -46,6 +48,8 @@ func (t *Transport) SendData(ctx context.Context, data []byte) error {
 		if len(body) > 0 {
 			t.client.base.HandleMessage(ctx, body)
 		}
+	case http.StatusUnauthorized:
+		return jsonrpc.NewUnauthorizedError(resp.StatusCode, body)
 	default:
 		return fmt.Errorf("invalid status code: %d: %s", resp.StatusCode, body)
 	}

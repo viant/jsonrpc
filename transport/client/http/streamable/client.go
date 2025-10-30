@@ -92,6 +92,11 @@ func (c *Client) openStream(ctx context.Context) error {
 		return fmt.Errorf("failed to open stream: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
+		if resp.StatusCode == http.StatusUnauthorized {
+			body, _ := io.ReadAll(resp.Body)
+			_ = resp.Body.Close()
+			return jsonrpc.NewUnauthorizedError(resp.StatusCode, body)
+		}
 		_ = resp.Body.Close()
 		return fmt.Errorf("stream invalid status: %d", resp.StatusCode)
 	}
