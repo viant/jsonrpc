@@ -74,8 +74,13 @@ func (r *RoundTrips) Match(id any) (*RoundTrip, error) {
 	if r.error != nil {
 		return nil, r.error
 	}
-	from := int(atomic.AddUint64(&r.next, 1) - 1)
-	for i := from; i < r.capacity; i++ {
+	// Start scanning from a rotating index but wrap around to cover entire ring.
+	start := 0
+	if r.capacity > 0 {
+		start = int(atomic.AddUint64(&r.next, 1)-1) % r.capacity
+	}
+	for k := 0; k < r.capacity; k++ {
+		i := (start + k) % r.capacity
 		if r.Ring[i] != nil && equals(r.Ring[i].Request.Id, id) {
 			ret := r.Ring[i]
 			r.Ring[i] = nil
@@ -90,8 +95,13 @@ func (r *RoundTrips) Add(request *jsonrpc.Request) (*RoundTrip, error) {
 	if r.error != nil {
 		return nil, r.error
 	}
-	from := int(atomic.AddUint64(&r.counter, 1) - 1)
-	for i := from; i < r.capacity; i++ {
+	if r.capacity == 0 {
+		return nil, fmt.Errorf("failed to add request, ring is full")
+	}
+	// Find next available slot starting at a rotating index and wrapping around.
+	start := int(atomic.AddUint64(&r.counter, 1)-1) % r.capacity
+	for k := 0; k < r.capacity; k++ {
+		i := (start + k) % r.capacity
 		if r.Ring[i] == nil {
 			ret := NewRoundTrip(request)
 			r.Ring[i] = ret
