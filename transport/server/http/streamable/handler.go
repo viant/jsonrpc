@@ -137,6 +137,33 @@ func (h *Handler) handleGET(w http.ResponseWriter, r *http.Request) {
 	base.WithEventOverflowPolicy(h.Options.OverflowPolicy)(aSession)
 	base.WithSSE()(aSession)
 
+	// Keepalive loop guarded by writer generation
+	if h.Options.KeepAliveInterval > 0 {
+		gen := aSession.WriterGeneration()
+		stop := make(chan struct{})
+		go func(gen uint64) {
+			ticker := time.NewTicker(h.Options.KeepAliveInterval)
+			defer ticker.Stop()
+			for {
+				// stop if writer has been reattached
+				if aSession.WriterGeneration() != gen {
+					return
+				}
+				select {
+				case <-ticker.C:
+					if aSession.WriterGeneration() != gen {
+						return
+					}
+					aSession.Touch()
+					_, _ = aSession.Writer.Write([]byte(": keepalive\n\n"))
+				case <-stop:
+					return
+				}
+			}
+		}(gen)
+		defer close(stop)
+	}
+
 	// Support resumability: replay events after Last-Event-ID if provided
 	if last := strings.TrimSpace(r.Header.Get("Last-Event-ID")); last != "" {
 		if v, err := strconv.ParseUint(last, 10, 64); err == nil {
@@ -398,6 +425,7 @@ func New(newHandler transport.NewHandler, opts ...Option) *Handler {
 			CleanupInterval:      30 * time.Second,
 			MaxEventBuffer:       1024,
 			RemovalPolicy:        base.RemovalAfterGrace,
+			KeepAliveInterval:    30 * time.Second,
 			RehydrateOnHandshake: true,
 		},
 		base: base.NewHandler(),

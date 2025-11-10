@@ -42,6 +42,10 @@ type Options struct {
 	AuthCookieUseTopDomain bool
 	RehydrateOnHandshake   bool
 	LogoutAllPath          string
+
+	// KeepAliveInterval controls emission of SSE keepalive frames on the
+	// long-lived GET stream. Zero or negative disables keepalives.
+	KeepAliveInterval time.Duration
 }
 
 // BFFCookie defines cookie attributes used to carry the session id.

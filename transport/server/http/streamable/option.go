@@ -43,6 +43,10 @@ type Options struct {
 	AuthCookieUseTopDomain bool
 	RehydrateOnHandshake   bool
 	LogoutAllPath          string
+
+	// KeepAliveInterval controls emission of SSE keepalive frames on the
+	// long-lived GET stream. Zero or negative disables keepalives.
+	KeepAliveInterval time.Duration
 }
 
 // Option mutates Options.
@@ -141,3 +145,9 @@ func WithRehydrateOnHandshake(v bool) Option { return func(o *Options) { o.Rehyd
 
 // WithLogoutAllPath sets an optional path to revoke the BFF auth grant (logout all sessions).
 func WithLogoutAllPath(path string) Option { return func(o *Options) { o.LogoutAllPath = path } }
+
+// WithKeepAliveInterval sets the interval for SSE keepalive frames on the GET stream.
+// Set to 0 or negative to disable.
+func WithKeepAliveInterval(d time.Duration) Option {
+	return func(o *Options) { o.KeepAliveInterval = d }
+}

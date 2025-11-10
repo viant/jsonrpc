@@ -104,3 +104,9 @@ func WithRehydrateOnHandshake(v bool) Option { return func(t *Options) { t.Rehyd
 
 // WithLogoutAllPath sets an optional path to revoke the BFF auth grant (logout all sessions).
 func WithLogoutAllPath(path string) Option { return func(t *Options) { t.LogoutAllPath = path } }
+
+// WithKeepAliveInterval sets the interval for SSE keepalive frames on the GET stream.
+// Set to 0 or negative to disable.
+func WithKeepAliveInterval(d time.Duration) Option {
+	return func(t *Options) { t.KeepAliveInterval = d }
+}

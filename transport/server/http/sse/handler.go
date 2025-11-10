@@ -266,30 +266,36 @@ func (s *Handler) handleSSE(w http.ResponseWriter, r *http.Request) {
 				}
 
 				// Optional keepalive with generation guard
-				gen := aSession.WriterGeneration()
-				stop := make(chan struct{})
-				go func(gen uint64) {
-					ticker := time.NewTicker(25 * time.Second)
-					defer ticker.Stop()
-					for {
-						// stop if writer has been reattached
-						if aSession.WriterGeneration() != gen {
-							return
-						}
-						select {
-						case <-ticker.C:
+				var stop chan struct{}
+				if s.Options.KeepAliveInterval > 0 {
+					gen := aSession.WriterGeneration()
+					stop = make(chan struct{})
+					go func(gen uint64) {
+						ticker := time.NewTicker(s.Options.KeepAliveInterval)
+						defer ticker.Stop()
+						for {
+							// stop if writer has been reattached
 							if aSession.WriterGeneration() != gen {
 								return
 							}
-							_, _ = aSession.Writer.Write([]byte(": ping\n\n"))
-						case <-stop:
-							return
+							select {
+							case <-ticker.C:
+								if aSession.WriterGeneration() != gen {
+									return
+								}
+								aSession.Touch()
+								_, _ = aSession.Writer.Write([]byte(": keepalive\n\n"))
+							case <-stop:
+								return
+							}
 						}
-					}
-				}(gen)
+					}(gen)
+				}
 
 				<-r.Context().Done()
-				close(stop)
+				if stop != nil {
+					close(stop)
+				}
 				// mark session detached for potential quick reconnect
 				aSession.MarkDetached()
 				aSession.Writer = nil
@@ -308,29 +314,35 @@ func (s *Handler) handleSSE(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Keepalive while connection is open (generation guard)
-	gen := aSession.WriterGeneration()
-	stop := make(chan struct{})
-	go func(gen uint64) {
-		ticker := time.NewTicker(25 * time.Second)
-		defer ticker.Stop()
-		for {
-			if aSession.WriterGeneration() != gen {
-				return
-			}
-			select {
-			case <-ticker.C:
+	var stop chan struct{}
+	if s.Options.KeepAliveInterval > 0 {
+		gen := aSession.WriterGeneration()
+		stop = make(chan struct{})
+		go func(gen uint64) {
+			ticker := time.NewTicker(s.Options.KeepAliveInterval)
+			defer ticker.Stop()
+			for {
 				if aSession.WriterGeneration() != gen {
 					return
 				}
-				_, _ = aSession.Writer.Write([]byte(": ping\n\n"))
-			case <-stop:
-				return
+				select {
+				case <-ticker.C:
+					if aSession.WriterGeneration() != gen {
+						return
+					}
+					aSession.Touch()
+					_, _ = aSession.Writer.Write([]byte(": keepalive\n\n"))
+				case <-stop:
+					return
+				}
 			}
-		}
-	}(gen)
+		}(gen)
+	}
 
 	<-r.Context().Done()
-	close(stop)
+	if stop != nil {
+		close(stop)
+	}
 	// mark session detached for potential quick reconnect
 	aSession.MarkDetached()
 	aSession.Writer = nil
@@ -368,12 +380,13 @@ func New(newHandler transport.NewHandler, options ...Option) *Handler {
 			SessionLocation:          session.NewQueryLocation("session_id"),
 			StreamingSessionLocation: session.NewQueryLocation("Mcp-Session-Id"),
 			// Lifecycle defaults
-			ReconnectGrace:  30 * time.Second,
-			IdleTTL:         5 * time.Minute,
-			MaxLifetime:     1 * time.Hour,
-			CleanupInterval: 30 * time.Second,
-			MaxEventBuffer:  1024,
-			RemovalPolicy:   base.RemovalAfterGrace,
+			ReconnectGrace:    30 * time.Second,
+			IdleTTL:           5 * time.Minute,
+			MaxLifetime:       1 * time.Hour,
+			CleanupInterval:   30 * time.Second,
+			MaxEventBuffer:    1024,
+			RemovalPolicy:     base.RemovalAfterGrace,
+			KeepAliveInterval: 30 * time.Second,
 		},
 		base: base.NewHandler(),
 		options: []base.Option{
