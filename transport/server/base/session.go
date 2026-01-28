@@ -174,24 +174,28 @@ func (s *Session) storeEvent(id uint64, data []byte) {
 
 // EventsAfter returns buffered framed messages with id greater than lastID.
 func (s *Session) EventsAfter(lastID uint64) [][]byte {
-	if lastID == 0 || len(s.events) == 0 {
-		res := make([][]byte, len(s.events))
-		for i, ev := range s.events {
+	s.Mutex.Lock()
+	events := make([]event, len(s.events))
+	copy(events, s.events)
+	s.Mutex.Unlock()
+	if lastID == 0 || len(events) == 0 {
+		res := make([][]byte, len(events))
+		for i, ev := range events {
 			res[i] = ev.data
 		}
 		return res
 	}
 	var idx int
 	// simple linear search as buffer small
-	for idx < len(s.events) && s.events[idx].id <= lastID {
+	for idx < len(events) && events[idx].id <= lastID {
 		idx++
 	}
-	if idx >= len(s.events) {
+	if idx >= len(events) {
 		return nil
 	}
-	res := make([][]byte, len(s.events)-idx)
-	for i := idx; i < len(s.events); i++ {
-		res[i-idx] = s.events[i].data
+	res := make([][]byte, len(events)-idx)
+	for i := idx; i < len(events); i++ {
+		res[i-idx] = events[i].data
 	}
 	return res
 }
@@ -239,6 +243,7 @@ func (s *Session) MarkDetached() {
 	s.DetachedAt = &now
 	s.State = SessionStateDetached
 	s.WriterPresent = false
+	s.Writer = nil
 	s.Mutex.Unlock()
 }
 

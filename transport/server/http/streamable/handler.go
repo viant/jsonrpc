@@ -178,7 +178,6 @@ func (h *Handler) handleGET(w http.ResponseWriter, r *http.Request) {
 	// Block until client closes, then mark session detached for quick reconnect.
 	<-r.Context().Done()
 	aSession.MarkDetached()
-	aSession.Writer = nil
 }
 
 func (h *Handler) handleDELETE(w http.ResponseWriter, r *http.Request) {

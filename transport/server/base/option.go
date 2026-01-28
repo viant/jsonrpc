@@ -5,6 +5,8 @@ type Option func(s *Session)
 
 func WithFramer(framer FrameMessage) Option {
 	return func(s *Session) {
+		s.Mutex.Lock()
+		defer s.Mutex.Unlock()
 		s.framer = framer
 	}
 }
@@ -13,6 +15,8 @@ func WithFramer(framer FrameMessage) Option {
 // server can re-deliver messages on Last-Event-ID reconnect.
 func WithEventBuffer(size int) Option {
 	return func(s *Session) {
+		s.Mutex.Lock()
+		defer s.Mutex.Unlock()
 		if size > 0 {
 			s.bufferSize = size
 		}
@@ -23,6 +27,8 @@ func WithEventBuffer(size int) Option {
 // the same id for resumability (Last-Event-ID).
 func WithSSE() Option {
 	return func(s *Session) {
+		s.Mutex.Lock()
+		defer s.Mutex.Unlock()
 		s.sse = true
 	}
 }
@@ -40,6 +46,8 @@ const (
 // WithEventOverflowPolicy sets the overflow policy for event buffering.
 func WithEventOverflowPolicy(policy OverflowPolicy) Option {
 	return func(s *Session) {
+		s.Mutex.Lock()
+		defer s.Mutex.Unlock()
 		s.overflowPolicy = policy
 	}
 }
