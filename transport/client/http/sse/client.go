@@ -13,6 +13,7 @@ import (
 	stdurl "net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -22,6 +23,7 @@ type Client struct {
 	streamURL        string
 	base             *base.Client
 	done             chan bool
+	closeOnce        sync.Once
 	transport        *Transport
 
 	sessionID string
@@ -37,6 +39,33 @@ type Client struct {
 	// session id on reconnect GET requests. Defaults to "Mcp-Session-Id" to
 	// align with server default, but can be overridden via option.
 	streamSessionParamName string
+}
+
+// Close stops the SSE listener and prevents further reconnect attempts.
+// Safe to call multiple times.
+func (c *Client) Close() error {
+	if c == nil {
+		return nil
+	}
+	c.closeOnce.Do(func() {
+		if c.done != nil {
+			close(c.done)
+		}
+	})
+	return nil
+}
+
+// isClosed reports whether Close has been called.
+func (c *Client) isClosed() bool {
+	if c == nil || c.done == nil {
+		return false
+	}
+	select {
+	case <-c.done:
+		return true
+	default:
+		return false
+	}
 }
 
 // sessionContext returns ctx enriched with MCP session id when available.
@@ -194,33 +223,82 @@ func (c *Client) read(ctx context.Context, reader *bufio.Reader) (*Event, error)
 }
 
 func (c *Client) listenForMessages(ctx context.Context, reader *bufio.Reader) {
+	// Bounded reconnect with exponential backoff. The previous implementation
+	// spawned a fresh goroutine per reconnect, which on a flapping connection
+	// produces an unbounded chain of listener goroutines (each calling start
+	// → listenForMessages → start ...). Reusing the current goroutine and
+	// honoring c.done keeps the goroutine count constant.
+	backoff := 500 * time.Millisecond
+	const maxBackoff = 10 * time.Second
 	for {
-		event, err := c.read(ctx, reader)
-		if err != nil {
-			// Attempt to seamlessly reconnect the SSE stream.
-			go func() {
-				_ = c.start(ctx)
-			}()
-			return
-		}
-		// Ignore empty events (can occur during reconnect or keep-alive comments).
-		if event.Event == "" {
-			continue
-		}
-		// Track last received event id for Last-Event-ID resumability
-		if event.ID != "" {
-			if v, err := strconv.ParseUint(strings.TrimSpace(event.ID), 10, 64); err == nil {
-				c.lastEventID = v
+		for {
+			event, err := c.read(ctx, reader)
+			if err != nil {
+				break
+			}
+			if event.Event == "" {
+				continue
+			}
+			if event.ID != "" {
+				if v, perr := strconv.ParseUint(strings.TrimSpace(event.ID), 10, 64); perr == nil {
+					c.lastEventID = v
+				}
+			}
+			switch event.Event {
+			case "message":
+				c.base.HandleMessage(c.sessionContext(ctx), []byte(event.Data))
+			default:
+				continue
 			}
 		}
-		switch event.Event {
-		case "message":
-			c.base.HandleMessage(c.sessionContext(ctx), []byte(event.Data))
-		default:
-			// Unrecognised event – skip instead of propagating fatal error.
+		if c.isClosed() || ctx.Err() != nil {
+			return
+		}
+		// reconnect; reuse this goroutine
+		newReader, rerr := c.reconnect(ctx)
+		if rerr != nil {
+			select {
+			case <-c.done:
+				return
+			case <-ctx.Done():
+				return
+			case <-time.After(backoff):
+			}
+			if backoff < maxBackoff {
+				backoff *= 2
+				if backoff > maxBackoff {
+					backoff = maxBackoff
+				}
+			}
 			continue
 		}
+		backoff = 500 * time.Millisecond
+		reader = newReader
 	}
+}
+
+// reconnect re-opens the SSE GET stream and returns a fresh bufio.Reader
+// positioned at the start of the event stream. It performs handshake again so
+// any rotated endpoint/session id from the server is captured.
+func (c *Client) reconnect(ctx context.Context) (*bufio.Reader, error) {
+	req, err := c.newStreamingRequest(ctx)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.transport.sseClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to SSE stream: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		_ = resp.Body.Close()
+		return nil, fmt.Errorf("invalid status code: %d", resp.StatusCode)
+	}
+	reader := bufio.NewReader(resp.Body)
+	if err := c.handleHandshake(reader); err != nil {
+		_ = resp.Body.Close()
+		return nil, err
+	}
+	return reader, nil
 }
 
 func New(ctx context.Context, streamURL string, options ...Option) (*Client, error) {
