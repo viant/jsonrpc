@@ -10,10 +10,16 @@ import (
 // Option mutates Client.
 type Option func(*Client)
 
-// WithHTTPClient allows custom http.Client.
+// WithHTTPClient allows custom http.Client for both SSE stream (GET) and
+// JSON-RPC message (POST) requests.
 func WithHTTPClient(client *http.Client) Option {
 	return func(c *Client) {
 		c.httpClient = client
+		// Also update the Transport's client so POST requests use the same
+		// http.Client (e.g., with auth RoundTripper).
+		if c.transport != nil {
+			c.transport.client = client
+		}
 	}
 }
 

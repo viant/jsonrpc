@@ -155,7 +155,9 @@ func (h *Handler) handleGET(w http.ResponseWriter, r *http.Request) {
 						return
 					}
 					aSession.Touch()
-					_, _ = aSession.Writer.Write([]byte(": keepalive\n\n"))
+					if !aSession.WriteKeepAlive([]byte(": keepalive\n\n")) {
+						return
+					}
 				case <-stop:
 					return
 				}

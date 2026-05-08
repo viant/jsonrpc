@@ -263,3 +263,16 @@ func (s *Session) MarkActiveWithWriter(w io.Writer) {
 func (s *Session) WriterGeneration() uint64 {
 	return atomic.LoadUint64(&s.writerGen)
 }
+
+// WriteKeepAlive writes a keepalive comment to the session writer under mutex.
+// Returns false if the writer is nil (session detached).
+func (s *Session) WriteKeepAlive(data []byte) bool {
+	s.Mutex.Lock()
+	w := s.Writer
+	s.Mutex.Unlock()
+	if w == nil {
+		return false
+	}
+	_, _ = w.Write(data)
+	return true
+}

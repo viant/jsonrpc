@@ -49,6 +49,33 @@ type Client struct {
 	// streaming control
 	streamMu     sync.Mutex
 	streamActive bool
+
+	// lifecycle: Close terminates the background runStream goroutine and
+	// cancels any in-flight SSE read on the GET stream. Without these the
+	// runStream loop never exits — see Close.
+	closeOnce    sync.Once
+	done         chan struct{}
+	streamCtx    context.Context
+	streamCancel context.CancelFunc
+}
+
+// Close terminates the background SSE stream goroutine started by
+// ensureStream and cancels any in-flight stream read. Safe to call multiple
+// times. Returns nil; the signature exists so callers (e.g. pool managers)
+// can treat the client as a regular io.Closer-like resource.
+func (c *Client) Close() error {
+	if c == nil {
+		return nil
+	}
+	c.closeOnce.Do(func() {
+		if c.streamCancel != nil {
+			c.streamCancel()
+		}
+		if c.done != nil {
+			close(c.done)
+		}
+	})
+	return nil
 }
 
 // sessionContext returns a context enriched with the current MCP session id. If
@@ -209,20 +236,38 @@ func (c *Client) ensureStream() {
 }
 
 func (c *Client) runStream() {
+	defer func() {
+		c.streamMu.Lock()
+		c.streamActive = false
+		c.streamMu.Unlock()
+	}()
 	// simple exponential backoff with cap
 	backoff := 500 * time.Millisecond
 	maxBackoff := 10 * time.Second
 	for {
+		select {
+		case <-c.done:
+			return
+		default:
+		}
 		// wait until session id is available
 		if c.sessionID == "" {
-			time.Sleep(100 * time.Millisecond)
+			select {
+			case <-c.done:
+				return
+			case <-time.After(100 * time.Millisecond):
+			}
 			continue
 		}
-		// Use a background context for long-lived stream
-		ctx := context.Background()
-		if err := c.openStream(ctx); err != nil {
-			// stream couldn't be opened; back off and retry
-			time.Sleep(backoff)
+		// Use the long-lived stream context so Close cancels any blocking
+		// SSE read in openStream.
+		if err := c.openStream(c.streamCtx); err != nil {
+			// stream couldn't be opened; back off and retry, unless closing
+			select {
+			case <-c.done:
+				return
+			case <-time.After(backoff):
+			}
 			if backoff < maxBackoff {
 				backoff *= 2
 				if backoff > maxBackoff {
@@ -250,7 +295,9 @@ func New(ctx context.Context, endpointURL string, opts ...Option) (*Client, erro
 		endpointURL:      endpointURL,
 		httpClient:       httpClient,
 		handshakeTimeout: 30 * time.Second,
+		done:             make(chan struct{}),
 	}
+	c.streamCtx, c.streamCancel = context.WithCancel(context.Background())
 	c.sessionHeaderName = "Mcp-Session-Id"
 	// Default protocol version (can be overridden via option)
 	if c.protocolVersion == "" {
