@@ -33,6 +33,15 @@ func (t *Transport) setEndpoint(uri string) {
 // SendData forwards JSON-RPC message data to the server using HTTP POST.
 func (t *Transport) SendData(ctx context.Context, data []byte) error {
 	t.Lock()
+	unlocked := false
+	unlock := func() {
+		if unlocked {
+			return
+		}
+		t.Unlock()
+		unlocked = true
+	}
+	defer unlock()
 
 	if t.endpoint == "" {
 		return fmt.Errorf("transport is not initialised - endpoint is empty")
@@ -51,7 +60,6 @@ func (t *Transport) SendData(ctx context.Context, data []byte) error {
 
 	resp, err := t.client.Do(req)
 	if err != nil {
-		t.Unlock()
 		return fmt.Errorf("failed to send request: %w", err)
 	}
 	// If server sent session id on handshake, capture it
@@ -65,7 +73,7 @@ func (t *Transport) SendData(ctx context.Context, data []byte) error {
 	}
 
 	if t.c.sessionID == "" {
-		t.Unlock()
+		_ = resp.Body.Close()
 		return fmt.Errorf("handshake missing %s header", t.c.sessionHeaderName)
 	}
 
@@ -73,7 +81,7 @@ func (t *Transport) SendData(ctx context.Context, data []byte) error {
 	if ct := resp.Header.Get("Content-Type"); strings.Contains(ct, "text/event-stream") {
 		// Release the transport lock before consuming the stream to allow
 		// re-entrant SendData calls (e.g. replies to server-initiated requests)
-		t.Unlock()
+		unlock()
 		reader := bufio.NewReader(resp.Body)
 		// consume stream inline; server should close stream after sending response
 		t.c.consumeSSEPost(ctx, reader)
@@ -93,6 +101,5 @@ func (t *Transport) SendData(ctx context.Context, data []byte) error {
 	default:
 		return fmt.Errorf("invalid status code: %d: %s", resp.StatusCode, string(body))
 	}
-	t.Unlock()
 	return nil
 }
