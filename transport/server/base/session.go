@@ -276,3 +276,16 @@ func (s *Session) WriteKeepAlive(data []byte) bool {
 	_, _ = w.Write(data)
 	return true
 }
+
+// WriteBuffered writes framed or replay data to the current session writer.
+// Returns false when the session has no attached writer.
+func (s *Session) WriteBuffered(data []byte) bool {
+	s.Mutex.Lock()
+	w := s.Writer
+	s.Mutex.Unlock()
+	if w == nil {
+		return false
+	}
+	_, _ = w.Write(data)
+	return true
+}

@@ -116,3 +116,31 @@ func TestTransportSendData_ClosesBodyWhenHandshakeHeaderMissing(t *testing.T) {
 		t.Fatal("response body was not closed on missing session header")
 	}
 }
+
+func TestTransportSendData_PrefersHTTPStatusOverMissingHandshakeHeader(t *testing.T) {
+	client := &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusServiceUnavailable,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader("upstream unavailable")),
+				Request:    req,
+			}, nil
+		}),
+	}
+
+	streamClient := &Client{
+		sessionHeaderName: "Mcp-Session-Id",
+	}
+	transport := &Transport{
+		client:   client,
+		headers:  make(http.Header),
+		endpoint: "http://example.com/mcp",
+		c:        streamClient,
+	}
+
+	err := transport.SendData(context.Background(), []byte(`{"jsonrpc":"2.0"}`))
+	if err == nil || !strings.Contains(err.Error(), "invalid status code: 503: upstream unavailable") {
+		t.Fatalf("expected upstream status error, got %v", err)
+	}
+}

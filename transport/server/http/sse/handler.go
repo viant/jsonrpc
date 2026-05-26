@@ -128,7 +128,7 @@ func (s *Handler) handleMessage(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusAccepted)
 	output := fmt.Sprintf("event: message\ndata: %s\n\n", buffer.String())
-	aSession.Writer.Write([]byte(output))
+	_ = aSession.WriteBuffered([]byte(output))
 }
 
 func (s *Handler) isError(buffer bytes.Buffer) bool {
@@ -259,7 +259,9 @@ func (s *Handler) handleSSE(w http.ResponseWriter, r *http.Request) {
 					if v, err := strconv.ParseUint(last, 10, 64); err == nil {
 						if msgs := aSession.EventsAfter(v); len(msgs) > 0 {
 							for _, m := range msgs {
-								_, _ = aSession.Writer.Write(m)
+								if !aSession.WriteBuffered(m) {
+									break
+								}
 							}
 						}
 					}
@@ -284,7 +286,9 @@ func (s *Handler) handleSSE(w http.ResponseWriter, r *http.Request) {
 									return
 								}
 								aSession.Touch()
-								_, _ = aSession.Writer.Write([]byte(": keepalive\n\n"))
+								if !aSession.WriteKeepAlive([]byte(": keepalive\n\n")) {
+									return
+								}
 							case <-stop:
 								return
 							}
@@ -331,7 +335,9 @@ func (s *Handler) handleSSE(w http.ResponseWriter, r *http.Request) {
 						return
 					}
 					aSession.Touch()
-					_, _ = aSession.Writer.Write([]byte(": keepalive\n\n"))
+					if !aSession.WriteKeepAlive([]byte(": keepalive\n\n")) {
+						return
+					}
 				case <-stop:
 					return
 				}

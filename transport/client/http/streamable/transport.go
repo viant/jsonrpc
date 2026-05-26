@@ -62,6 +62,18 @@ func (t *Transport) SendData(ctx context.Context, data []byte) error {
 	if err != nil {
 		return fmt.Errorf("failed to send request: %w", err)
 	}
+
+	if resp.StatusCode == http.StatusUnauthorized {
+		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		return jsonrpc.NewUnauthorizedError(resp.StatusCode, body)
+	}
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
+		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		return fmt.Errorf("invalid status code: %d: %s", resp.StatusCode, string(body))
+	}
+
 	// If server sent session id on handshake, capture it
 	if sessionID := resp.Header.Get(t.c.sessionHeaderName); sessionID != "" {
 		// Update known session id and ensure the GET stream is running
@@ -91,15 +103,8 @@ func (t *Transport) SendData(ctx context.Context, data []byte) error {
 
 	body, _ := io.ReadAll(resp.Body)
 	_ = resp.Body.Close()
-	switch resp.StatusCode {
-	case http.StatusOK, http.StatusAccepted:
-		if len(body) > 0 {
-			t.c.base.HandleMessage(ctx, body)
-		}
-	case http.StatusUnauthorized:
-		return jsonrpc.NewUnauthorizedError(resp.StatusCode, body)
-	default:
-		return fmt.Errorf("invalid status code: %d: %s", resp.StatusCode, string(body))
+	if len(body) > 0 {
+		t.c.base.HandleMessage(ctx, body)
 	}
 	return nil
 }

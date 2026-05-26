@@ -171,7 +171,9 @@ func (h *Handler) handleGET(w http.ResponseWriter, r *http.Request) {
 		if v, err := strconv.ParseUint(last, 10, 64); err == nil {
 			if msgs := aSession.EventsAfter(v); len(msgs) > 0 {
 				for _, m := range msgs {
-					_, _ = aSession.Writer.Write(m)
+					if !aSession.WriteBuffered(m) {
+						break
+					}
 				}
 			}
 		}
