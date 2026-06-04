@@ -30,10 +30,21 @@ func (m *SyncMap[K, V]) Delete(k K) {
 }
 
 func (m *SyncMap[K, V]) Range(f func(key K, value V) bool) {
+	type entry struct {
+		key   K
+		value V
+	}
+
+	m.mux.RLock()
+	entries := make([]entry, 0, len(m.m))
 	for k, v := range m.m {
-		// call the function with the key and value
-		if !f(k, v) {
-			return // stop iteration if f returns false
+		entries = append(entries, entry{key: k, value: v})
+	}
+	m.mux.RUnlock()
+
+	for _, item := range entries {
+		if !f(item.key, item.value) {
+			return
 		}
 	}
 }
