@@ -52,11 +52,14 @@ func (t *Transport) SendData(ctx context.Context, data []byte) error {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	// Per spec, client MUST declare it supports both JSON & SSE for POST
-	req.Header.Set("Accept", "application/json, text/event-stream")
+	// Keep request/response POSTs synchronous. The long-lived GET stream still
+	// carries server-initiated requests such as sampling, while the final
+	// response for this request is delivered on this POST body.
+	req.Header.Set("Accept", "application/json")
 	for k, v := range t.headers {
-		req.Header[k] = v
+		req.Header[k] = append([]string(nil), v...)
 	}
+	unlock()
 
 	resp, err := t.client.Do(req)
 	if err != nil {
@@ -77,9 +80,11 @@ func (t *Transport) SendData(ctx context.Context, data []byte) error {
 	// If server sent session id on handshake, capture it
 	if sessionID := resp.Header.Get(t.c.sessionHeaderName); sessionID != "" {
 		// Update known session id and ensure the GET stream is running
+		t.Lock()
 		t.c.sessionID = sessionID
 		// Ensure subsequent message POSTs include the session id header
 		t.headers.Set(t.c.sessionHeaderName, sessionID)
+		t.Unlock()
 		// Start long-lived GET stream (reconnection handled internally)
 		t.c.ensureStream()
 	}
