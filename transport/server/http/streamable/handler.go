@@ -128,7 +128,12 @@ func (h *Handler) handleGET(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", sseMime)
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set(defaultSessionHeaderKey, sessionID)
 	h.setCORSHeaders(w, r)
+	w.WriteHeader(http.StatusOK)
+	if flusher, ok := w.(http.Flusher); ok {
+		flusher.Flush()
+	}
 
 	// Reattach writer that flushes every message and switch to SSE framing
 	aSession.MarkActiveWithWriter(common.NewFlushWriter(w))
@@ -238,30 +243,15 @@ func (h *Handler) handleMessage(w http.ResponseWriter, r *http.Request, sessionI
 
 	ctx := context.WithValue(r.Context(), jsonrpc.SessionKey, aSession)
 
-	// If client accepts SSE, and this is a JSON-RPC request, stream via SSE.
-	if acceptsSSE(r.Header) && isJSONRPCRequest(data) && hasID(data) {
-		// Prepare SSE response and writer
-		w.Header().Set("Content-Type", sseMime)
-		w.Header().Set("Cache-Control", "no-cache")
-		w.Header().Set("Connection", "keep-alive")
-		h.setCORSHeaders(w, r)
-		aSession.MarkActiveWithWriter(common.NewFlushWriter(w))
-		base.WithFramer(frameSSE)(aSession)
-		base.WithEventBuffer(h.Options.MaxEventBuffer)(aSession)
-		base.WithEventOverflowPolicy(h.Options.OverflowPolicy)(aSession)
-		base.WithSSE()(aSession)
-		// Stream response and any further messages on this connection
-		h.base.HandleMessage(ctx, aSession, data, nil)
-		return
-	}
-
 	// Default: synchronous JSON response or 202 Accepted for notifications
 	buffer := bytes.Buffer{}
 	h.base.HandleMessage(ctx, aSession, data, &buffer)
 	if buffer.Len() == 0 { // notification (no response)
+		w.Header().Set(defaultSessionHeaderKey, sessionID)
 		w.WriteHeader(http.StatusAccepted)
 		return
 	}
+	w.Header().Set(defaultSessionHeaderKey, sessionID)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(buffer.Bytes())

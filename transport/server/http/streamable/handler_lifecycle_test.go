@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -18,6 +19,14 @@ type serverHandler struct{}
 
 func (h *serverHandler) Serve(_ context.Context, _ *jsonrpc.Request, _ *jsonrpc.Response) {}
 func (h *serverHandler) OnNotification(_ context.Context, _ *jsonrpc.Notification)        {}
+
+type echoHandler struct{}
+
+func (h *echoHandler) Serve(_ context.Context, _ *jsonrpc.Request, resp *jsonrpc.Response) {
+	resp.Result = []byte(`{"ok":true}`)
+}
+
+func (h *echoHandler) OnNotification(_ context.Context, _ *jsonrpc.Notification) {}
 
 func TestStreamable_DetachReconnectAndCleanup(t *testing.T) {
 	// Fast sweeper and grace for test
@@ -155,5 +164,50 @@ func TestStreamable_IdleTTLAndMaxLifetime(t *testing.T) {
 	time.Sleep(80 * time.Millisecond) // allow sweeper
 	if _, ok := h.base.Sessions.Get(sid2); ok {
 		t.Fatalf("expected session removed due to MaxLifetime")
+	}
+}
+
+func TestStreamable_PostMessage_RemainsSynchronousJSONEvenWhenEventStreamAccepted(t *testing.T) {
+	var _ transport.Handler = (*echoHandler)(nil)
+
+	h := New(func(ctx context.Context, tr transport.Transport) transport.Handler {
+		return &echoHandler{}
+	}, []Option{WithURI("/mcp-test-sync")}...)
+
+	mux := http.NewServeMux()
+	mux.Handle("/mcp-test-sync", h)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	handshakeResp, err := http.Post(srv.URL+"/mcp-test-sync", "application/json", strings.NewReader(`{"jsonrpc":"2.0","id":0,"method":"initialize","params":{}}`))
+	if err != nil {
+		t.Fatalf("handshake POST failed: %v", err)
+	}
+	_ = handshakeResp.Body.Close()
+	sid := handshakeResp.Header.Get(defaultSessionHeaderKey)
+	if sid == "" {
+		t.Fatalf("missing session id header %s", defaultSessionHeaderKey)
+	}
+
+	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/mcp-test-sync", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"ping","params":{}}`))
+	req.Header.Set("Accept", "text/event-stream, application/json")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(defaultSessionHeaderKey, sid)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("message POST failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if got := resp.Header.Get("Content-Type"); !strings.Contains(got, "application/json") {
+		t.Fatalf("expected synchronous application/json response, got %q", got)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("failed to read response body: %v", err)
+	}
+	if !strings.Contains(string(body), `"ok":true`) {
+		t.Fatalf("expected JSON body, got %s", string(body))
 	}
 }
