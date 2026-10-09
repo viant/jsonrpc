@@ -103,7 +103,7 @@ func (c *Client) handleResponse(ctx context.Context, data []byte, message *jsonr
 	err := json.Unmarshal(data, response)
 	if err != nil {
 		if c.Logger != nil {
-			c.Logger.Errorf("failed to parse response: %v", err)
+			base.LogParseError(c.Logger, jsonrpc.MessageTypeResponse, err, len(data))
 		}
 		return
 	}
@@ -149,7 +149,7 @@ func (c *Client) handleRequest(ctx context.Context, data []byte, message *jsonrp
 	request := &jsonrpc.Request{}
 	if err := json.Unmarshal(data, request); err != nil {
 		if c.Logger != nil {
-			c.Logger.Errorf("failed to parse request: %v", err)
+			base.LogParseError(c.Logger, jsonrpc.MessageTypeRequest, err, len(data))
 		}
 		return
 	}
@@ -168,7 +168,7 @@ func (c *Client) handleOnNotification(ctx context.Context, data []byte, message 
 	err := json.Unmarshal(bytes.TrimSpace(data), notification)
 	if err != nil {
 		if c.Logger != nil {
-			c.Logger.Errorf("failed to parse notification: %v, %s", err, data)
+			base.LogParseError(c.Logger, jsonrpc.MessageTypeNotification, err, len(data))
 		}
 	}
 	c.Handler.OnNotification(ctx, notification)

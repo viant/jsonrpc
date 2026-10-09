@@ -59,7 +59,7 @@ func (e *Handler) HandleMessage(ctx context.Context, session *Session, data []by
 		response := &jsonrpc.Response{}
 		if err := json.Unmarshal(data, response); err != nil {
 			if e.Logger != nil {
-				e.Logger.Errorf("failed to parse response: %v", err)
+				base.LogParseError(e.Logger, jsonrpc.MessageTypeResponse, err, len(data))
 			}
 			return
 		}
@@ -74,7 +74,7 @@ func (e *Handler) HandleMessage(ctx context.Context, session *Session, data []by
 		notification := &jsonrpc.Notification{}
 		if err := json.Unmarshal(data, notification); err != nil {
 			if e.Logger != nil {
-				e.Logger.Errorf("failed to parse notification: %v", err)
+				base.LogParseError(e.Logger, jsonrpc.MessageTypeNotification, err, len(data))
 			}
 			return
 		}
