@@ -113,7 +113,7 @@ func WithSessionID(id string) Option {
 		if id == "" {
 			return
 		}
-		c.sessionID = id
+		c.setSessionID(id)
 		if c.transport != nil && c.transport.headers != nil {
 			// Ensure POSTs include the session header immediately
 			if c.sessionHeaderName == "" {

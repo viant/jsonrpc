@@ -95,7 +95,7 @@ func (t *Transport) SendData(ctx context.Context, data []byte) error {
 	if sessionID := resp.Header.Get(t.c.sessionHeaderName); !t.c.stateless && sessionID != "" {
 		// Update known session id and ensure the GET stream is running
 		t.Lock()
-		t.c.sessionID = sessionID
+		t.c.setSessionID(sessionID)
 		// Ensure subsequent message POSTs include the session id header
 		t.headers.Set(t.c.sessionHeaderName, sessionID)
 		t.Unlock()
@@ -103,7 +103,7 @@ func (t *Transport) SendData(ctx context.Context, data []byte) error {
 		t.c.ensureStream()
 	}
 
-	if !t.c.stateless && t.c.sessionID == "" {
+	if !t.c.stateless && t.c.SessionID() == "" {
 		_ = resp.Body.Close()
 		return fmt.Errorf("handshake missing %s header", t.c.sessionHeaderName)
 	}

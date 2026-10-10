@@ -33,6 +33,7 @@ type Client struct {
 	handshakeTimeout time.Duration
 
 	sessionID string
+	sessionMu sync.RWMutex
 
 	lastIDGet  uint64
 	lastIDPost uint64
@@ -85,10 +86,11 @@ func (c *Client) Close() error {
 // sessionContext returns a context enriched with the current MCP session id. If
 // no session id has been established yet it returns the original context.
 func (c *Client) sessionContext(ctx context.Context) context.Context {
-	if c.stateless || c.sessionID == "" {
+	id := c.SessionID()
+	if c.stateless || id == "" {
 		return ctx
 	}
-	return context.WithValue(ctx, jsonrpc.SessionKey, c.sessionID)
+	return context.WithValue(ctx, jsonrpc.SessionKey, id)
 }
 
 // Notify sends JSON-RPC notification.
@@ -102,7 +104,17 @@ func (c *Client) Send(ctx context.Context, r *jsonrpc.Request) (*jsonrpc.Respons
 }
 
 // SessionID returns the currently configured or negotiated session id.
-func (c *Client) SessionID() string { return c.sessionID }
+func (c *Client) SessionID() string {
+	c.sessionMu.RLock()
+	defer c.sessionMu.RUnlock()
+	return c.sessionID
+}
+
+func (c *Client) setSessionID(id string) {
+	c.sessionMu.Lock()
+	c.sessionID = id
+	c.sessionMu.Unlock()
+}
 
 func (c *Client) openStream(ctx context.Context) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.endpointURL, nil)
@@ -110,7 +122,7 @@ func (c *Client) openStream(ctx context.Context) error {
 		return err
 	}
 	req.Header.Set("Accept", sseMime)
-	req.Header.Set(c.sessionHeaderName, c.sessionID)
+	req.Header.Set(c.sessionHeaderName, c.SessionID())
 	if c.protocolVersion != "" {
 		req.Header.Set("MCP-Protocol-Version", c.protocolVersion)
 	}
@@ -258,7 +270,7 @@ func (c *Client) runStream() {
 		default:
 		}
 		// wait until session id is available
-		if c.sessionID == "" {
+		if c.SessionID() == "" {
 			select {
 			case <-c.done:
 				return

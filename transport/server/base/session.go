@@ -275,12 +275,11 @@ func (s *Session) WriterGeneration() uint64 {
 // Returns false if the writer is nil (session detached).
 func (s *Session) WriteKeepAlive(data []byte) bool {
 	s.Mutex.Lock()
-	w := s.Writer
-	s.Mutex.Unlock()
-	if w == nil {
+	defer s.Mutex.Unlock()
+	if s.Writer == nil {
 		return false
 	}
-	_, _ = w.Write(data)
+	_, _ = s.Writer.Write(data)
 	return true
 }
 
@@ -288,11 +287,10 @@ func (s *Session) WriteKeepAlive(data []byte) bool {
 // Returns false when the session has no attached writer.
 func (s *Session) WriteBuffered(data []byte) bool {
 	s.Mutex.Lock()
-	w := s.Writer
-	s.Mutex.Unlock()
-	if w == nil {
+	defer s.Mutex.Unlock()
+	if s.Writer == nil {
 		return false
 	}
-	_, _ = w.Write(data)
+	_, _ = s.Writer.Write(data)
 	return true
 }

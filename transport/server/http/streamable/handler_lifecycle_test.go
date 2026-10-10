@@ -33,6 +33,7 @@ func TestStreamable_DetachReconnectAndCleanup(t *testing.T) {
 	opts := []Option{
 		WithURI("/mcp-test"),
 		WithCleanupInterval(50 * time.Millisecond),
+		WithKeepAliveInterval(time.Millisecond),
 		WithReconnectGrace(300 * time.Millisecond),
 		WithIdleTTL(0),
 		WithMaxLifetime(0),
@@ -80,8 +81,11 @@ func TestStreamable_DetachReconnectAndCleanup(t *testing.T) {
 	if !ok {
 		t.Fatalf("session not found after detach")
 	}
-	if sess.State != base.SessionStateDetached {
-		t.Fatalf("expected detached state, got %v", sess.State)
+	sess.Lock()
+	state := sess.State
+	sess.Unlock()
+	if state != base.SessionStateDetached {
+		t.Fatalf("expected detached state, got %v", state)
 	}
 
 	// Reconnect within grace
@@ -94,8 +98,11 @@ func TestStreamable_DetachReconnectAndCleanup(t *testing.T) {
 	}
 	// Allow reattach
 	time.Sleep(50 * time.Millisecond)
-	if sess.State != base.SessionStateActive {
-		t.Fatalf("expected active state after reconnect, got %v", sess.State)
+	sess.Lock()
+	state = sess.State
+	sess.Unlock()
+	if state != base.SessionStateActive {
+		t.Fatalf("expected active state after reconnect, got %v", state)
 	}
 	_ = getResp2.Body.Close()
 
@@ -139,7 +146,9 @@ func TestStreamable_IdleTTLAndMaxLifetime(t *testing.T) {
 	}
 
 	// Force idle by backdating LastSeen
+	sess.Lock()
 	sess.LastSeen = time.Now().Add(-2 * time.Second)
+	sess.Unlock()
 	time.Sleep(120 * time.Millisecond) // > IdleTTL and > CleanupInterval
 	if _, ok := h.base.Sessions.Get(sid); ok {
 		t.Fatalf("expected session removed due to IdleTTL")
@@ -159,7 +168,9 @@ func TestStreamable_IdleTTLAndMaxLifetime(t *testing.T) {
 	if !ok {
 		t.Fatalf("session2 not found after handshake")
 	}
+	sess2.Lock()
 	sess2.CreatedAt = time.Now().Add(-1 * time.Hour)
+	sess2.Unlock()
 
 	time.Sleep(80 * time.Millisecond) // allow sweeper
 	if _, ok := h.base.Sessions.Get(sid2); ok {

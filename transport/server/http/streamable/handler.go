@@ -279,7 +279,9 @@ func (h *Handler) handleGET(w http.ResponseWriter, r *http.Request) {
 	if h.Options.KeepAliveInterval > 0 {
 		gen := aSession.WriterGeneration()
 		stop := make(chan struct{})
+		done := make(chan struct{})
 		go func(gen uint64) {
+			defer close(done)
 			ticker := time.NewTicker(h.Options.KeepAliveInterval)
 			defer ticker.Stop()
 			for {
@@ -301,7 +303,10 @@ func (h *Handler) handleGET(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}(gen)
-		defer close(stop)
+		defer func() {
+			close(stop)
+			<-done
+		}()
 	}
 
 	// Support resumability: replay events after Last-Event-ID if provided
@@ -582,6 +587,8 @@ func (h *Handler) runSweeper() {
 		now := time.Now()
 		var toDelete []string
 		h.base.Sessions.Range(func(id string, sess *base.Session) bool {
+			sess.Lock()
+			defer sess.Unlock()
 			remove := false
 			// Max lifetime
 			if h.Options.MaxLifetime > 0 && now.Sub(sess.CreatedAt) > h.Options.MaxLifetime {
