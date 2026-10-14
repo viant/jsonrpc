@@ -60,6 +60,21 @@ func (s *Session) NextRequestID() jsonrpc.RequestId {
 	return int(atomic.AddUint64(&s.RequestIdSeq, 1))
 }
 
+// observeRequestID raises the shared sequence without moving it backward when
+// multiple requests arrive on the same session concurrently.
+func (s *Session) observeRequestID(id int) {
+	if id <= 0 {
+		return
+	}
+	wanted := uint64(id)
+	for {
+		current := atomic.LoadUint64(&s.RequestIdSeq)
+		if current >= wanted || atomic.CompareAndSwapUint64(&s.RequestIdSeq, current, wanted) {
+			return
+		}
+	}
+}
+
 type event struct {
 	id   uint64
 	data []byte

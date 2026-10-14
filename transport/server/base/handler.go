@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sync/atomic"
 
 	"github.com/viant/jsonrpc"
 	"github.com/viant/jsonrpc/transport/base"
@@ -32,8 +31,7 @@ func (e *Handler) HandleMessage(ctx context.Context, session *Session, data []by
 		}
 		if request.Id != nil {
 			if intId, ok := jsonrpc.AsRequestIntId(request.Id); ok {
-				nextSeq := uint64(max(intId, int(session.RequestIdSeq)))
-				atomic.StoreUint64(&session.RequestIdSeq, nextSeq)
+				session.observeRequestID(intId)
 			}
 		}
 
