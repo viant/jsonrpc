@@ -140,6 +140,7 @@ func (h *Handler) handleStatelessPOST(w http.ResponseWriter, r *http.Request) {
 	// Notifications have no response and therefore do not need an SSE stream.
 	if !hasID(data) {
 		aSession := base.NewSession(r.Context(), "", io.Discard, h.newHandler, h.statelessSessionOptions()...)
+		defer aSession.Close(h.Options.OnSessionClose)
 		ctx := context.WithValue(r.Context(), jsonrpc.SessionKey, aSession)
 		h.base.HandleMessage(ctx, aSession, data, nil)
 		w.WriteHeader(http.StatusAccepted)
@@ -158,12 +159,14 @@ func (h *Handler) handleStatelessPOST(w http.ResponseWriter, r *http.Request) {
 
 		options := append(h.statelessSessionOptions(), base.WithFramer(frameSSE), base.WithSSE())
 		aSession := base.NewSession(r.Context(), "", common.NewFlushWriter(w), h.newHandler, options...)
+		defer aSession.Close(h.Options.OnSessionClose)
 		ctx := context.WithValue(r.Context(), jsonrpc.SessionKey, aSession)
 		h.base.HandleMessage(ctx, aSession, data, nil)
 		return
 	}
 
 	aSession := base.NewSession(r.Context(), "", io.Discard, h.newHandler, h.statelessSessionOptions()...)
+	defer aSession.Close(h.Options.OnSessionClose)
 	ctx := context.WithValue(r.Context(), jsonrpc.SessionKey, aSession)
 	buffer := bytes.Buffer{}
 	h.base.HandleMessage(ctx, aSession, data, &buffer)
@@ -333,7 +336,7 @@ func (h *Handler) handleDELETE(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("missing %s", h.SessionLocation.Name), http.StatusBadRequest)
 		return
 	}
-	h.base.Sessions.Delete(sessionID)
+	base.CloseSession(h.base.Sessions, sessionID, h.Options.OnSessionClose)
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -623,15 +626,7 @@ func (h *Handler) runSweeper() {
 			return true
 		})
 		for _, id := range toDelete {
-			if h.Options.OnSessionClose != nil {
-				if sess, ok := h.base.Sessions.Get(id); ok {
-					func() {
-						defer func() { _ = recover() }()
-						h.Options.OnSessionClose(sess)
-					}()
-				}
-			}
-			h.base.Sessions.Delete(id)
+			base.CloseSession(h.base.Sessions, id, h.Options.OnSessionClose)
 		}
 	}
 }
