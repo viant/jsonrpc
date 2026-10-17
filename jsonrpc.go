@@ -45,6 +45,8 @@ func asInt(v interface{}) int {
 
 // Error is used to provide additional information about the error that occurred.
 type Error struct {
+	// cause is local diagnostic provenance and never part of the wire error.
+	cause error
 	// The error type that occurred.
 	Code int `json:"code" yaml:"code" mapstructure:"code"`
 
