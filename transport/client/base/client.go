@@ -60,6 +60,7 @@ func (c *Client) Send(ctx context.Context, request *jsonrpc.Request) (*jsonrpc.R
 	if err != nil {
 		return nil, err // send error
 	}
+	defer c.RoundTrips.Remove(trip)
 	err = trip.Wait(ctx, c.RunTimeout)
 	if err != nil {
 		return nil, err
@@ -184,6 +185,7 @@ func (c *Client) send(ctx context.Context, request *jsonrpc.Request) (*transport
 	}
 	err = c.sendRequest(ctx, request)
 	if err != nil {
+		c.RoundTrips.Remove(trip)
 		return nil, err
 	}
 	return trip, nil
