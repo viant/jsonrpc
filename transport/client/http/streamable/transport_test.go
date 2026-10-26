@@ -3,6 +3,8 @@ package streamable
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -145,7 +147,7 @@ func TestTransportSendData_PrefersHTTPStatusOverMissingHandshakeHeader(t *testin
 	}
 
 	err := transport.SendData(context.Background(), []byte(`{"jsonrpc":"2.0"}`))
-	if err == nil || !strings.Contains(err.Error(), "invalid status code: 503: upstream unavailable") {
+	if err == nil || !strings.Contains(err.Error(), "invalid status code: 503") {
 		t.Fatalf("expected upstream status error, got %v", err)
 	}
 }
@@ -389,5 +391,69 @@ func TestTransportSendData_ConsumesLargeSSEResponse(t *testing.T) {
 	}
 	if len(response.Result) == 0 {
 		t.Fatal("expected response result")
+	}
+}
+
+type statusResponseBody struct {
+	io.Reader
+	closed bool
+}
+
+func (b *statusResponseBody) Close() error { b.closed = true; return nil }
+
+func TestHTTPAuthorizationStatusRemainsDistinct(t *testing.T) {
+	for _, status := range []int{401, 403, 500, 503} {
+		for _, method := range []string{"POST", "GET"} {
+			t.Run(fmt.Sprintf("%s/%d", method, status), func(t *testing.T) {
+				body := &statusResponseBody{Reader: strings.NewReader("private response body")}
+				client := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+					return &http.Response{StatusCode: status, Header: make(http.Header), Body: body, Request: req}, nil
+				})}
+				stream := &Client{endpointURL: "http://fixture.invalid/mcp", httpClient: client, sessionHeaderName: "Mcp-Session-Id"}
+				transport := &Transport{client: client, headers: make(http.Header), endpoint: stream.endpointURL, c: stream}
+				var err error
+				if method == "POST" {
+					err = transport.SendData(context.Background(), []byte(`{"jsonrpc":"2.0"}`))
+				} else {
+					err = stream.openStream(context.Background())
+				}
+				if !body.closed {
+					t.Fatal("rejected HTTP response body was not closed")
+				}
+				if status == 401 {
+					if !jsonrpc.IsUnauthorized(err) {
+						t.Fatalf("401 lost challenge identity: %v", err)
+					}
+					return
+				}
+				var typed *jsonrpc.HTTPStatusError
+				if !errors.As(err, &typed) || typed.HTTPStatusCode() != status {
+					t.Fatalf("status lost: %v", err)
+				}
+				if jsonrpc.IsUnauthorized(err) || strings.Contains(err.Error(), "private response body") {
+					t.Fatalf("non401 must not challenge or expose response: %v", err)
+				}
+			})
+		}
+	}
+}
+
+func TestHTTPForbiddenAndServerStatusPrecedeProtocolAuthBody(t *testing.T) {
+	for _, status := range []int{403, 500} {
+		t.Run(fmt.Sprint(status), func(t *testing.T) {
+			client := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				return &http.Response{StatusCode: status, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(`{"jsonrpc":"2.0","id":1,"error":{"code":-32001,"message":"private upstream authorization detail"}}`)), Request: req}, nil
+			})}
+			stream := &Client{endpointURL: "http://fixture.invalid/mcp", httpClient: client}
+			transport := &Transport{client: client, headers: make(http.Header), endpoint: stream.endpointURL, c: stream}
+			err := transport.SendData(context.Background(), []byte(`{"jsonrpc":"2.0","id":1,"method":"initialize"}`))
+			var typed *jsonrpc.HTTPStatusError
+			if !errors.As(err, &typed) || typed.StatusCode != status || jsonrpc.IsUnauthorized(err) {
+				t.Fatalf("HTTP status lost to protocol body: %v", err)
+			}
+			if strings.Contains(err.Error(), "private") {
+				t.Fatalf("response body exposed: %v", err)
+			}
+		})
 	}
 }

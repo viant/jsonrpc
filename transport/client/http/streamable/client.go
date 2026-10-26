@@ -141,7 +141,7 @@ func (c *Client) openStream(ctx context.Context) error {
 			return jsonrpc.NewUnauthorizedError(resp.StatusCode, body)
 		}
 		_ = resp.Body.Close()
-		return fmt.Errorf("stream invalid status: %d", resp.StatusCode)
+		return jsonrpc.NewHTTPStatusError(resp.StatusCode)
 	}
 
 	reader := bufio.NewReader(resp.Body)

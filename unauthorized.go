@@ -31,3 +31,13 @@ func IsUnauthorized(err error) bool {
 	var target *UnauthorizedError
 	return errors.As(err, &target)
 }
+
+// HTTPStatusError preserves a rejected HTTP status without treating it as an
+// OAuth challenge. Response bodies and URLs are deliberately not retained.
+type HTTPStatusError struct{ StatusCode int }
+
+func (e *HTTPStatusError) Error() string       { return fmt.Sprintf("invalid status code: %d", e.StatusCode) }
+func (e *HTTPStatusError) HTTPStatusCode() int { return e.StatusCode }
+func NewHTTPStatusError(statusCode int) *HTTPStatusError {
+	return &HTTPStatusError{StatusCode: statusCode}
+}

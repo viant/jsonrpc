@@ -93,7 +93,7 @@ func (c *Client) start(ctx context.Context) error {
 			return jsonrpc.NewUnauthorizedError(resp.StatusCode, body)
 		}
 		_ = resp.Body.Close()
-		return fmt.Errorf("invalid status code: %d", resp.StatusCode)
+		return jsonrpc.NewHTTPStatusError(resp.StatusCode)
 	}
 	reader := bufio.NewReader(resp.Body)
 	if err := c.handleHandshake(reader); err != nil {
@@ -291,7 +291,7 @@ func (c *Client) reconnect(ctx context.Context) (*bufio.Reader, error) {
 	}
 	if resp.StatusCode != http.StatusOK {
 		_ = resp.Body.Close()
-		return nil, fmt.Errorf("invalid status code: %d", resp.StatusCode)
+		return nil, jsonrpc.NewHTTPStatusError(resp.StatusCode)
 	}
 	reader := bufio.NewReader(resp.Body)
 	if err := c.handleHandshake(reader); err != nil {

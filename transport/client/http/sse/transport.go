@@ -51,7 +51,7 @@ func (t *Transport) SendData(ctx context.Context, data []byte) error {
 	case http.StatusUnauthorized:
 		return jsonrpc.NewUnauthorizedError(resp.StatusCode, body)
 	default:
-		return fmt.Errorf("invalid status code: %d: %s", resp.StatusCode, body)
+		return jsonrpc.NewHTTPStatusError(resp.StatusCode)
 	}
 	return nil
 }

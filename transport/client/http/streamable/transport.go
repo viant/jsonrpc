@@ -84,11 +84,16 @@ func (t *Transport) SendData(ctx context.Context, data []byte) error {
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
 		body, _ := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
+		// Forbidden and server failures remain HTTP outcomes even when a
+		// response resembles a protocol authorization challenge.
+		if resp.StatusCode == http.StatusForbidden || resp.StatusCode >= http.StatusInternalServerError {
+			return jsonrpc.NewHTTPStatusError(resp.StatusCode)
+		}
 		if isJSONRPCErrorResponse(data, body) {
 			t.c.base.HandleMessage(ctx, body)
 			return nil
 		}
-		return fmt.Errorf("invalid status code: %d: %s", resp.StatusCode, string(body))
+		return jsonrpc.NewHTTPStatusError(resp.StatusCode)
 	}
 
 	// If server sent session id on handshake, capture it in stateful mode.
