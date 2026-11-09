@@ -48,6 +48,7 @@ type Client struct {
 	// on all HTTP requests (POST/GET) made by this client.
 	protocolVersion string
 	stateless       bool
+	optionalSession bool
 
 	requestHeaderProvider RequestHeaderProvider
 

@@ -108,7 +108,7 @@ func (t *Transport) SendData(ctx context.Context, data []byte) error {
 		t.c.ensureStream()
 	}
 
-	if !t.c.stateless && t.c.SessionID() == "" {
+	if !t.c.stateless && !t.c.optionalSession && t.c.SessionID() == "" {
 		_ = resp.Body.Close()
 		return fmt.Errorf("handshake missing %s header", t.c.sessionHeaderName)
 	}

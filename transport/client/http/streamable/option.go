@@ -79,6 +79,12 @@ func WithProtocolVersion(version string) Option {
 	}
 }
 
+// WithOptionalSession accepts POST responses without a session ID while
+// retaining session headers and GET streaming when the server assigns an ID.
+func WithOptionalSession() Option {
+	return func(c *Client) { c.optionalSession = true }
+}
+
 // WithStateless enables independent POST-based Streamable HTTP requests. In
 // this mode no session id or background GET stream is required.
 func WithStateless() Option {
