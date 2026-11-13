@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"reflect"
 	"strings"
 	"sync"
 
@@ -120,9 +121,9 @@ func (t *Transport) SendData(ctx context.Context, data []byte) error {
 		unlock()
 		reader := bufio.NewReader(resp.Body)
 		// consume stream inline; server should close stream after sending response
-		t.c.consumeSSEPost(ctx, reader)
+		err := t.c.consumeSSEPost(ctx, reader, data)
 		_ = resp.Body.Close()
-		return nil
+		return err
 	}
 
 	body, _ := io.ReadAll(resp.Body)
@@ -149,4 +150,32 @@ func isJSONRPCErrorResponse(requestData, responseData []byte) bool {
 		return false
 	}
 	return bytes.Equal(bytes.TrimSpace(request.ID), bytes.TrimSpace(response.ID))
+}
+
+// isJSONRPCResponse recognizes completion of the request carried by this POST.
+// Notifications and responses for other requests do not complete its stream.
+func isJSONRPCResponse(requestID interface{}, responseData []byte) bool {
+	var response struct {
+		JSONRPC string          `json:"jsonrpc"`
+		Method  string          `json:"method"`
+		ID      interface{}     `json:"id"`
+		Result  json.RawMessage `json:"result"`
+		Error   *jsonrpc.Error  `json:"error"`
+	}
+	if json.Unmarshal(responseData, &response) != nil || response.JSONRPC != jsonrpc.Version || response.Method != "" || (response.Result == nil && response.Error == nil) {
+		return false
+	}
+	// JSON decoding represents both numeric IDs as float64. Match the
+	// integer normalization used by RoundTrips rather than comparing their
+	// spelling or introducing a different numeric identity here.
+	if requestNumber, ok := requestID.(float64); ok {
+		responseNumber, ok := response.ID.(float64)
+		if !ok {
+			return false
+		}
+		requestInt, _ := jsonrpc.AsRequestIntId(requestNumber)
+		responseInt, _ := jsonrpc.AsRequestIntId(responseNumber)
+		return requestInt == responseInt
+	}
+	return reflect.DeepEqual(requestID, response.ID)
 }

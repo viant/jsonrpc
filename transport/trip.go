@@ -28,6 +28,13 @@ func NewRoundTrip(request *jsonrpc.Request) *RoundTrip {
 
 // Wait waits for the trip to finish
 func (t *RoundTrip) Wait(ctx context.Context, timeout time.Duration) error {
+	// Preserve a response already delivered before the caller starts waiting,
+	// even when its context was canceled while the transport was unwinding.
+	select {
+	case <-t.done:
+		return t.err
+	default:
+	}
 	if timeout <= 0 {
 		select {
 		case <-ctx.Done():
